@@ -1,0 +1,40 @@
+{
+  "target_url": "https://www.google.com/",
+  "actions": [
+    {
+      "memo": "検索ボックスに入力",
+      "action": "input",
+      "selector": "textarea#APjFqb",
+      "value": "大阪府　株式会社　問い合わせ"
+    },
+    {
+      "memo": "検索　をクリック",
+      "action": "click",
+      "selector": "input[name=\"btnK\"][value=\"Google 検索\"]",
+      "wait_time_ms": 5000
+    },
+    {
+      "memo": "次へ　クリック",
+      "action": "click",
+      "selector": "#pnnext > span.oeN89d",
+      "wait_time_ms": 5000
+    },
+    {
+      "action": "sleep",
+      "wait_time_ms": 5000,
+      "value": 5
+    },
+    {
+      "memo": "検索結果　クリック",
+      "action": "click",
+      "selector": "a.zReHs",
+      "wait_time_ms": 5000
+    },
+    {
+      "memo": "内容を取得",
+      "action": "get_inner_text",
+      "selector": "body",
+      "wait_time_ms": 5000
+    }
+  ]
+}

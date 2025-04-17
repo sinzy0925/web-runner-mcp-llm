@@ -1,16 +1,13 @@
-# --- ファイル: playwright_actions.py (修正版) ---
-"""
-Playwrightの各アクション（クリック、入力、取得など）を実行するコアロジック。
-"""
+# --- ファイル: playwright_actions.py (最終修正版・完全コード) ---
 import asyncio
 import logging
 import os
 import time
 import pprint
 import traceback
-import re # <<< 正規表現モジュールをインポート
-from urllib.parse import urljoin, urlparse # <<< urlparse を追加
-from typing import List, Tuple, Optional, Union, Dict, Any, Set # <<< Set を追加
+import re
+from urllib.parse import urljoin, urlparse
+from typing import List, Tuple, Optional, Union, Dict, Any, Set
 
 from playwright.async_api import (
     Page,
@@ -20,738 +17,560 @@ from playwright.async_api import (
     BrowserContext,
     TimeoutError as PlaywrightTimeoutError,
     Error as PlaywrightError,
-    APIRequestContext
+    APIRequestContext,
+    expect # オプション: 入力値検証に使用する場合
 )
 
 import config
-import utils # PDF処理などで使用
+import utils
 from playwright_finders import find_element_dynamically, find_all_elements_dynamically
-from playwright_helper_funcs import get_page_inner_text # get_page_inner_text は別途使用
+from playwright_helper_funcs import get_page_inner_text
 
 logger = logging.getLogger(__name__)
 
-# --- ▼▼▼ 追加: メールアドレス抽出用ヘルパー関数 ▼▼▼ ---
-# メールアドレス抽出用の正規表現 (一般的なもの)
+# --- メールアドレス抽出用ヘルパー関数 ---
 EMAIL_REGEX = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
-
 async def _extract_emails_from_page_async(context: BrowserContext, url: str, timeout: int) -> List[str]:
-    """
-    指定されたURLに新しいページでアクセスし、ページのinnerTextとmailtoリンクからメールアドレスを抽出する。
-    重複を含むメールアドレスのリストを返す。失敗時は空リストを返す。
-    """
+    """指定されたURLからメールアドレスを抽出するヘルパー"""
     page = None
-    emails_found: Set[str] = set() # ページ内での重複を避けるために Set を使用
+    emails_found: Set[str] = set()
     start_time = time.monotonic()
-    # ページ遷移自体のタイムアウトも考慮
     page_access_timeout = max(int(timeout * 0.8), 15000)
     logger.info(f"URLからメール抽出開始: {url} (タイムアウト: {page_access_timeout}ms)")
-
     try:
         page = await context.new_page()
-        # ナビゲーションタイムアウトを設定
         nav_timeout = max(int(page_access_timeout * 0.9), 10000)
-        logger.debug(f"  Navigating to {url} with timeout {nav_timeout}ms")
         await page.goto(url, wait_until="load", timeout=nav_timeout)
-        logger.debug(f"  Navigation to {url} successful.")
-
-        # ページ全体のテキストを取得 (タイムアウトは残り時間で)
         remaining_time_for_text = page_access_timeout - (time.monotonic() - start_time) * 1000
-        if remaining_time_for_text <= 1000: # 最低1秒は確保
-            raise PlaywrightTimeoutError(f"Not enough time left to get page text from {url}")
+        if remaining_time_for_text <= 1000: raise PlaywrightTimeoutError("Not enough time for text extraction")
         text_timeout = int(remaining_time_for_text)
-        logger.debug(f"  Getting page innerText with timeout {text_timeout}ms")
-        # bodyがない場合もあるので、ルート要素から取得を試みる
         page_text = await page.locator(':root').inner_text(timeout=text_timeout)
-
-        # テキストからメールアドレスを抽出
         if page_text:
             found_in_text = EMAIL_REGEX.findall(page_text)
-            if found_in_text:
-                logger.debug(f"  Found {len(found_in_text)} potential emails in page text.")
-                emails_found.update(found_in_text) # Setに追加して重複排除
-
-        # mailto: リンクからメールアドレスを抽出
+            if found_in_text: emails_found.update(found_in_text)
         mailto_links = await page.locator("a[href^='mailto:']").all()
         if mailto_links:
-            logger.debug(f"  Found {len(mailto_links)} mailto links.")
             for link in mailto_links:
                 try:
-                    href = await link.get_attribute('href', timeout=500) # mailtoリンク取得は短時間で
+                    href = await link.get_attribute('href', timeout=500)
                     if href and href.startswith('mailto:'):
-                        # "mailto:" の部分と、?subject=...などのパラメータを除去
                         email_part = href[len('mailto:'):].split('?')[0]
-                        if email_part:
-                             # URLデコードが必要な場合もあるが、まずはそのまま追加
-                             # 簡易バリデーション
-                             if EMAIL_REGEX.match(email_part):
-                                 emails_found.add(email_part)
-                                 logger.debug(f"    Extracted email from mailto: {email_part}")
-                             else:
-                                  logger.debug(f"    Skipping invalid mailto part: {email_part}")
-
-                except PlaywrightTimeoutError:
-                    logger.warning(f"  Timeout getting href from a mailto link on {url}")
-                except Exception as link_err:
-                    logger.warning(f"  Error processing a mailto link on {url}: {link_err}")
-
+                        if email_part and EMAIL_REGEX.match(email_part):
+                            emails_found.add(email_part)
+                except Exception: pass
         elapsed = (time.monotonic() - start_time) * 1000
-        logger.info(f"メール抽出完了 ({url})。ユニーク候補数: {len(emails_found)} ({elapsed:.0f}ms)")
-        return list(emails_found) # Set を List にして返す
-
-    except PlaywrightTimeoutError as e:
-        elapsed = (time.monotonic() - start_time) * 1000
-        logger.warning(f"メール抽出中のタイムアウト ({url}, {elapsed:.0f}ms): {e}")
-        return [] # タイムアウト時は空リスト
+        logger.info(f"メール抽出完了 ({url}). ユニーク候補: {len(emails_found)} ({elapsed:.0f}ms)")
+        # --- ★ メール保存処理 (重要) ★ ---
+        if emails_found:
+            unique_emails_list = list(emails_found)
+            try:
+                output_dir = Path("output")
+                output_dir.mkdir(exist_ok=True)
+                mail_file_path = output_dir / "server_mails.txt"
+                with open(mail_file_path, "a", encoding="utf-8") as f:
+                    for email in unique_emails_list:
+                        f.write(email + '\n')
+                logger.info(f"Appended {len(unique_emails_list)} unique emails to {mail_file_path}")
+            except Exception as mfwe:
+                logger.error(f"Mail file write error: {mfwe}")
+        # --- ★ メール保存処理ここまで ★ ---
+        return list(emails_found) #抽出したメアドリストは返す
     except Exception as e:
-        elapsed = (time.monotonic() - start_time) * 1000
-        # ネットワークエラーなど、ページアクセス自体が失敗した場合
-        if "net::ERR_" in str(e):
-             logger.warning(f"メール抽出中のネットワークエラー ({url}, {elapsed:.0f}ms): {type(e).__name__} - {e}")
-        else:
-             logger.error(f"メール抽出中に予期せぬエラー ({url}, {elapsed:.0f}ms): {type(e).__name__} - {e}", exc_info=False)
-             logger.debug(f"Detailed error during email extraction from {url}:", exc_info=True)
-        return [] # その他のエラーでも空リスト
+        logger.warning(f"メール抽出エラー ({url}): {type(e).__name__} - {e}", exc_info=False)
+        logger.debug(f"メール抽出エラー ({url}) Traceback:", exc_info=True)
+        return []
     finally:
         if page and not page.is_closed():
-            try:
-                await page.close()
-                logger.debug(f"メール抽出用一時ページ ({url}) を閉じました。")
-            except Exception as close_e:
-                logger.warning(f"メール抽出用一時ページ ({url}) クローズ中にエラー (無視): {close_e}")
-# --- ▲▲▲ 追加 ▲▲▲ ---
+            try: await page.close()
+            except Exception: pass
 
 
+# --- Locator試行ヘルパー関数 ---
+async def try_locators_sequentially(
+    target_scope: Union[Page, FrameLocator],
+    hints: List[Dict[str, Any]],
+    action_name: str,
+    overall_timeout: int
+) -> Tuple[Optional[Locator], Optional[Dict[str, Any]], List[Dict[str, Any]]]:
+    """ヒントリストに基づいてLocatorを順番に試し、最初に見つかった有効なLocatorを返す。"""
+    start_time = time.monotonic()
+    successful_locator: Optional[Locator] = None
+    successful_hint: Optional[Dict[str, Any]] = None
+    attempt_logs: List[Dict[str, Any]] = []
+    hint_count = len(hints) if hints else 1
+    base_validation_timeout = max(500, min(2000, overall_timeout // max(1, hint_count)))
+    logger.info(f"[{action_name}] Trying {len(hints)} locator hints (overall timeout: {overall_timeout}ms, base validation timeout: {base_validation_timeout}ms)...")
+    hints.sort(key=lambda x: {"high": 0, "medium": 1, "low": 2}.get(x.get("confidence", "low"), 2))
+
+    for i, hint in enumerate(hints):
+        elapsed_ms = (time.monotonic() - start_time) * 1000
+        if elapsed_ms >= overall_timeout:
+            logger.warning(f"[{action_name}] Overall timeout ({overall_timeout}ms) reached during hint processing.")
+            break
+        remaining_ms = overall_timeout - elapsed_ms
+        current_validation_timeout = min(base_validation_timeout, max(100, int(remaining_ms * 0.8)))
+
+        hint_type = hint.get("type")
+        hint_value = hint.get("value")
+        hint_name = hint.get("name")
+        hint_level = hint.get("level")
+        hint_common_selector = hint.get("common_selector")
+        hint_index = hint.get("index")
+        hint_confidence = hint.get("confidence", "low")
+
+        locator_description = f"Hint {i+1}/{len(hints)}: type={hint_type}, confidence={hint_confidence}"
+        value_str = str(hint_value)
+        value_log = f"{value_str[:50]}{'...' if len(value_str) > 50 else ''}"
+        logging.info(f"  Trying: {locator_description} (value: {value_log})")
+
+        attempt_log = {"hint": hint, "status": "Skipped", "reason": "No locator generated"}
+        locator_to_try: Optional[Locator] = None
+
+        try:
+            options = {}
+            if hint_type == "role_and_text" and isinstance(hint_value, str):
+                 role = hint_value
+                 if isinstance(hint_name, str):
+                     if hint_name.startswith('/') and hint_name.endswith('/') and len(hint_name) > 2:
+                          try:
+                              pattern_part = hint_name[1:-1]; flags = 0
+                              if pattern_part.endswith('i'): pattern_part = pattern_part[:-1]; flags = re.IGNORECASE
+                              options["name"] = re.compile(pattern_part, flags)
+                              logging.debug(f"    Using get_by_role with regex name: {options['name']}")
+                          except re.error as re_err:
+                              logging.warning(f"    Invalid regex pattern: {hint_name} - {re_err}. Treating as literal.")
+                              options["name"] = hint_name
+                     else: options["name"] = hint_name; logging.debug(f"    Using get_by_role with exact name: {options['name']}")
+                 if role == "heading" and isinstance(hint_level, int): options["level"] = hint_level
+                 if isinstance(role, str) and role: locator_to_try = target_scope.get_by_role(role, **options)
+                 else: logging.warning(f"    Invalid role value: {role}"); attempt_log["reason"] = f"Invalid role value: {role}"
+            elif hint_type == "test_id" and isinstance(hint_value, str): locator_to_try = target_scope.get_by_test_id(hint_value)
+            elif hint_type == "text_exact" and isinstance(hint_value, str): locator_to_try = target_scope.get_by_text(hint_value, exact=True)
+            elif hint_type == "placeholder" and isinstance(hint_value, str): locator_to_try = target_scope.get_by_placeholder(hint_value)
+            elif hint_type == "aria_label" and isinstance(hint_value, str): locator_to_try = target_scope.get_by_label(hint_value, exact=True)
+            elif hint_type == "css_selector_candidate" and isinstance(hint_value, str): locator_to_try = target_scope.locator(hint_value)
+            elif hint_type == "nth_child" and isinstance(hint_common_selector, str) and isinstance(hint_index, int) and hint_index >= 0:
+                locator_to_try = target_scope.locator(hint_common_selector).nth(hint_index)
+            else: attempt_log["reason"] = f"Invalid or unknown hint type/data: {hint}"; logging.warning(f"    -> {attempt_log['reason']}")
+
+            if locator_to_try:
+                attempt_log["reason"] = "Checking validity..."
+                try: attempt_log["final_selector_attempted"] = repr(locator_to_try)
+                except Exception: attempt_log["final_selector_attempted"] = "repr() failed for locator"
+
+                count = await locator_to_try.count()
+                attempt_log["count"] = count; logging.debug(f"    -> Count: {count}")
+                if count == 1:
+                    is_visible = False
+                    try:
+                        await locator_to_try.wait_for(state='visible', timeout=current_validation_timeout)
+                        is_visible = True; logging.debug(f"    -> Visible (within {current_validation_timeout}ms).")
+                    except PlaywrightTimeoutError: logging.debug(f"    -> Not visible within {current_validation_timeout}ms timeout.")
+                    except Exception as vis_err: logging.warning(f"    -> Visibility check error: {vis_err}")
+                    attempt_log["is_visible"] = is_visible
+                    if is_visible:
+                        successful_locator = locator_to_try; successful_hint = hint
+                        attempt_log["status"] = "Success"; attempt_log["reason"] = "Found unique and visible element."
+                        logging.info(f"    -> Success! Found element.")
+                        attempt_logs.append(attempt_log); break
+                    else: attempt_log["status"] = "Fail"; attempt_log["reason"] = "Element found but not visible."; logging.info(f"    -> Element found but not visible.")
+                elif count > 1: attempt_log["status"] = "Fail"; attempt_log["reason"] = f"Multiple elements found ({count})."; logging.info(f"    -> Multiple elements found ({count}).")
+                else: attempt_log["status"] = "Fail"; attempt_log["reason"] = "Element not found."; logging.info(f"    -> Element not found.")
+            else: attempt_log["status"] = "Fail"
+        except PlaywrightError as e: attempt_log["status"] = "Error"; attempt_log["reason"] = f"PlaywrightError: {e}"; logging.warning(f"    -> PlaywrightError: {e}")
+        except Exception as e: attempt_log["status"] = "Error"; attempt_log["reason"] = f"Unexpected Error: {e}"; logging.warning(f"    -> Unexpected error: {e}"); logging.debug(traceback.format_exc())
+        attempt_logs.append(attempt_log)
+
+    if successful_locator: logger.info(f"[{action_name}] Located element using hint: {successful_hint}")
+    else: logger.warning(f"[{action_name}] Failed to locate element using any of the provided hints.")
+    return successful_locator, successful_hint, attempt_logs
+
+
+# --- execute_actions_async 本体 (input修正、エラーチェック修正、フォールバック実装含む) ---
 async def execute_actions_async(
     initial_page: Page,
     actions: List[Dict[str, Any]],
     api_request_context: APIRequestContext,
     default_timeout: int
 ) -> Tuple[bool, List[Dict[str, Any]]]:
-    """
-    指定されたページを起点として、定義されたアクションリストを順に実行します。
-    iframeの探索や切り替え、データ取得、エラーハンドリングなどを行います。
-    実行全体の成否 (bool) と、各ステップの結果詳細のリスト (List[dict]) を返します。
-    """
     results: List[Dict[str, Any]] = []
-    current_target: Union[Page, FrameLocator] = initial_page # 現在の操作対象スコープ
-    root_page: Page = initial_page # ルートとなるページオブジェクト (ページ遷移後も更新)
-    current_context: BrowserContext = root_page.context # 現在のブラウザコンテキスト
-    iframe_stack: List[Union[Page, FrameLocator]] = [] # iframe切り替えのためのスタック
+    current_target: Union[Page, FrameLocator] = initial_page
+    root_page: Page = initial_page
+    current_context: BrowserContext = root_page.context
+    iframe_stack: List[Union[Page, FrameLocator]] = []
 
     for i, step_data in enumerate(actions):
         step_num = i + 1
         action = step_data.get("action", "").lower()
         selector = step_data.get("selector")
+        target_hints = step_data.get("target_hints")
         iframe_selector_input = step_data.get("iframe_selector")
         value = step_data.get("value")
         attribute_name = step_data.get("attribute_name")
         option_type = step_data.get("option_type")
         option_value = step_data.get("option_value")
-        # アクション固有タイムアウト > 全体デフォルトタイムアウト > configデフォルト
         action_wait_time = step_data.get("wait_time_ms", default_timeout)
 
         logger.info(f"--- ステップ {step_num}/{len(actions)}: Action='{action}' ---")
-        step_info = {"selector": selector, "value": value, "iframe(指定)": iframe_selector_input,
-                     "option_type": option_type, "option_value": option_value, "attribute_name": attribute_name}
-        # Noneでない値だけをログに出力
-        step_info_str = ", ".join([f"{k}='{str(v)[:50]}{'...' if len(str(v)) > 50 else ''}'" # 値が長い場合は省略
+        step_info = {
+            "selector": selector, "target_hints_count": len(target_hints) if isinstance(target_hints, list) else None,
+            "iframe(指定)": iframe_selector_input, "value": value, "attribute_name": attribute_name,
+            "option_type": option_type, "option_value": option_value,
+        }
+        step_info_str = ", ".join([f"{k}='{str(v)[:50]}...'" if isinstance(v, str) and len(v) > 50 else f"{k}='{v}'"
                                    for k, v in step_info.items() if v is not None])
         logger.info(f"詳細: {step_info_str} (timeout: {action_wait_time}ms)")
+        if isinstance(target_hints, list): logger.debug(f"Target Hints:\n{pprint.pformat(target_hints)}")
+
+        step_result_base = {"step": step_num, "action": action}
+        if step_data.get("memo"): step_result_base["memo"] = step_data["memo"]
 
         try:
-            # 各ステップ開始前にページが閉じられていないか確認
-            if root_page.is_closed():
-                raise PlaywrightError(f"Root page was closed before step {step_num}.")
-            # 現在の状態をログ出力
+            if root_page.is_closed(): raise PlaywrightError(f"Root page closed.")
             current_base_url = root_page.url
-            root_page_title = await root_page.title()
-            current_target_type = type(current_target).__name__
-            logger.info(f"現在のルートページ: URL='{current_base_url}', Title='{root_page_title}'")
-            logger.info(f"現在の探索スコープ: {current_target_type}")
-        except Exception as e:
-            logger.error(f"ステップ {step_num} 開始前の状態取得中にエラー: {e}", exc_info=True)
-            results.append({"step": step_num, "status": "error", "action": action, "message": f"Failed to get target info before step: {e}"})
-            return False, results # 状態取得失敗は致命的として中断
 
-        try:
             # --- Iframe/Parent Frame 切替 ---
             if action == "switch_to_iframe":
-                if not iframe_selector_input:
-                    raise ValueError("Action 'switch_to_iframe' requires 'iframe_selector'")
-                logger.info(f"[ユーザー指定] Iframe '{iframe_selector_input}' に切り替えます...")
-                target_frame_locator: Optional[FrameLocator] = None
-                try:
-                    # 現在のターゲットから iframe を探す
-                    target_frame_locator = current_target.frame_locator(iframe_selector_input)
-                    # iframeが存在し、アクセス可能か確認 (ルート要素の存在確認)
-                    await target_frame_locator.locator(':root').wait_for(state='attached', timeout=action_wait_time)
-                except PlaywrightTimeoutError:
-                    # 見つからない場合は明確なエラーとする
-                    raise PlaywrightTimeoutError(f"指定されたiframe '{iframe_selector_input}' が現在のスコープ '{type(current_target).__name__}' で見つからないか、タイムアウト({action_wait_time}ms)しました。")
-                except Exception as e:
-                    raise PlaywrightError(f"Iframe '{iframe_selector_input}' への切り替え中に予期せぬエラーが発生しました: {e}")
-
-                # 切り替え成功
-                if id(current_target) not in [id(s) for s in iframe_stack]: # 現在のターゲットがまだスタックになければ追加
-                    iframe_stack.append(current_target)
-                current_target = target_frame_locator # ターゲットを新しい FrameLocator に更新
-                logger.info(f"FrameLocator '{iframe_selector_input}' への切り替え成功。")
-                results.append({"step": step_num, "status": "success", "action": action, "selector": iframe_selector_input})
-                continue # 次のステップへ
-
+                if not iframe_selector_input: raise ValueError("iframe_selector required.")
+                logger.info(f"Switching to iframe: {iframe_selector_input}")
+                target_frame_locator = current_target.frame_locator(iframe_selector_input)
+                try: await target_frame_locator.locator(':root').wait_for(state='attached', timeout=action_wait_time)
+                except PlaywrightTimeoutError as e: raise PlaywrightTimeoutError(f"Iframe '{iframe_selector_input}' not found: {e}")
+                if id(current_target) not in [id(s) for s in iframe_stack]: iframe_stack.append(current_target)
+                current_target = target_frame_locator; logger.info(f"Switched to FrameLocator.")
+                results.append({**step_result_base, "status": "success", "selector": iframe_selector_input}); continue
             elif action == "switch_to_parent_frame":
-                if not iframe_stack:
-                    logger.warning("既にトップレベルフレームか、iframeスタックが空です。操作はスキップされます。")
-                    # FrameLocatorの場合のみルートページに戻す安全策は維持
-                    if isinstance(current_target, FrameLocator):
-                        logger.info("現在のターゲットがFrameLocatorのため、ルートページに戻します。")
-                        current_target = root_page
-                    results.append({"step": step_num, "status": "warning", "action": action, "message": "Already at top-level or stack empty."})
-                else:
-                    logger.info("[ユーザー指定] 親ターゲットに戻ります...")
-                    current_target = iframe_stack.pop() # スタックから親ターゲットを取り出す
-                    target_type = type(current_target).__name__
-                    logger.info(f"親ターゲットへの切り替え成功。現在の探索スコープ: {target_type}")
-                    results.append({"step": step_num, "status": "success", "action": action})
-                continue # 次のステップへ
-
+                status="warning"; message=None
+                if not iframe_stack: logger.warning("Already at top-level."); message="Already at top-level..."
+                else: current_target = iframe_stack.pop(); logger.info(f"Switched to parent: {type(current_target).__name__}"); status="success"
+                if status == "warning" and isinstance(current_target, FrameLocator): current_target = root_page
+                results.append({**step_result_base, "status": status, "message": message}); continue
 
             # --- ページ全体操作 ---
             if action in ["wait_page_load", "sleep", "scroll_page_to_bottom"]:
-                if action == "wait_page_load":
-                    logger.info("ページの読み込み完了 (load) を待ちます...")
-                    await root_page.wait_for_load_state("load", timeout=action_wait_time)
-                    logger.info("ページの読み込みが完了しました。")
-                    results.append({"step": step_num, "status": "success", "action": action})
-                elif action == "sleep":
-                    try:
-                        seconds = float(value) if value is not None else 1.0 # デフォルト1秒
-                        if seconds < 0: raise ValueError("Sleep time cannot be negative.")
-                    except (TypeError, ValueError):
-                        raise ValueError("Invalid value for sleep action. Must be a non-negative number (seconds).")
-                    logger.info(f"{seconds:.1f} 秒待機します...")
-                    await asyncio.sleep(seconds)
-                    results.append({"step": step_num, "status": "success", "action": action, "duration_sec": seconds})
-                elif action == "scroll_page_to_bottom":
-                    logger.info("ページ最下部へスクロールします...")
-                    # JavaScriptを実行してスクロール
-                    await root_page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
-                    await asyncio.sleep(0.5) # スクロール後の描画やイベント発生を少し待つ
-                    logger.info("ページ最下部へのスクロールが完了しました。")
-                    results.append({"step": step_num, "status": "success", "action": action})
-                continue # 次のステップへ
+                 if action == "wait_page_load":
+                     await root_page.wait_for_load_state("load", timeout=action_wait_time); logger.info("Page load complete.")
+                 elif action == "sleep":
+                     try: seconds = float(value); assert seconds >= 0
+                     except: raise ValueError("Invalid sleep value.")
+                     await asyncio.sleep(seconds); logger.info(f"Slept for {seconds}s.")
+                     results.append({**step_result_base, "status": "success", "duration_sec": seconds}); continue
+                 elif action == "scroll_page_to_bottom":
+                     await root_page.evaluate('window.scrollTo(0, document.body.scrollHeight)'); await asyncio.sleep(0.5); logger.info("Scrolled to bottom.")
+                 results.append({**step_result_base, "status": "success"}); continue
 
+            # --- 要素操作準備と要素特定ロジック ---
+            target_element: Optional[Locator] = None
+            found_elements_list: List[Tuple[Locator, Union[Page, FrameLocator]]] = []
+            found_scope: Optional[Union[Page, FrameLocator]] = None
+            successful_hint_info: Optional[Dict[str, Any]] = None
+            locator_attempt_logs: List[Dict[str, Any]] = []
 
-            # --- 要素操作のための準備 ---
-            element: Optional[Locator] = None # 単一要素操作用
-            found_elements_list: List[Tuple[Locator, Union[Page, FrameLocator]]] = [] # 複数要素操作用
-            found_scope: Optional[Union[Page, FrameLocator]] = None # 要素が見つかったスコープ
-
-            # アクションが単一要素を必要とするか、複数要素を対象とするか
-            single_element_required_actions = ["click", "input", "hover", "get_inner_text", "get_text_content", "get_inner_html", "get_attribute", "wait_visible", "select_option", "scroll_to_element"]
+            single_element_actions = ["click", "input", "hover", "get_inner_text", "get_text_content", "get_inner_html", "get_attribute", "wait_visible", "select_option", "scroll_to_element"]
             multiple_elements_actions = ["get_all_attributes", "get_all_text_contents"]
-            # スクリーンショットはセレクターがあれば単一要素、なければページ全体
-            is_screenshot_element = action == "screenshot" and selector is not None
+            is_screenshot_action = action == "screenshot"
+            needs_single_element = action in single_element_actions or (is_screenshot_action and (target_hints or selector))
+            needs_multiple_elements = action in multiple_elements_actions
 
-            if action in single_element_required_actions or action in multiple_elements_actions or is_screenshot_element:
-                if not selector:
-                    raise ValueError(f"Action '{action}' requires a 'selector'.")
+            # --- 要素特定実行 ---
+            if needs_single_element:
+                element_located_by = None
 
-                # --- 要素探索 ---
-                if action in single_element_required_actions or is_screenshot_element:
-                    # 探索する要素の状態を決定
-                    required_state = 'visible' if action in ['click', 'hover', 'screenshot', 'select_option', 'input', 'wait_visible', 'scroll_to_element'] else 'attached'
-                    logger.info(f"単一要素 '{selector}' (状態: {required_state}) を動的に探索します...")
-                    element, found_scope = await find_element_dynamically(
+                # 1. target_hints を試す
+                if target_hints and isinstance(target_hints, list) and target_hints:
+                    logger.info(f"Locating element based on target_hints...")
+                    target_element, successful_hint_info, locator_attempt_logs = await try_locators_sequentially(
+                        current_target, target_hints, action, action_wait_time
+                    )
+                    step_result_base["locator_attempts"] = locator_attempt_logs
+                    if target_element:
+                        logger.info(f"Element located using target_hints: {successful_hint_info}")
+                        step_result_base["locator_hint_used"] = successful_hint_info
+                        found_scope = current_target
+                        element_located_by = 'hints'
+                    else:
+                        logger.warning("Failed to locate element using target_hints.")
+
+                # 2. target_hints がない、または失敗した場合に selector でフォールバック
+                if not target_element and selector:
+                    fallback_reason = "target_hints not provided" if not target_hints else "target_hints failed"
+                    logger.warning(f"{fallback_reason}, falling back to dynamic search using selector: '{selector}'")
+                    required_state = 'visible' if action in ['click', 'hover', 'input', 'wait_visible', 'select_option', 'scroll_to_element', 'screenshot'] else 'attached'
+                    target_element, found_scope = await find_element_dynamically(
                         current_target, selector, max_depth=config.DYNAMIC_SEARCH_MAX_DEPTH, timeout=action_wait_time, target_state=required_state
                     )
-                    if not element or not found_scope:
-                        # 要素が見つからない場合は明確なエラーとして処理を中断
-                        error_msg = f"要素 '{selector}' (状態: {required_state}) が現在のスコープおよび探索可能なiframe (深さ{config.DYNAMIC_SEARCH_MAX_DEPTH}まで) 内で見つかりませんでした。"
-                        logger.error(error_msg)
-                        results.append({"step": step_num, "status": "error", "action": action, "selector": selector, "required_state": required_state, "message": error_msg})
-                        return False, results # Falseを返して処理中断
+                    if target_element and found_scope:
+                        logger.info(f"Element located using fallback selector '{selector}'.")
+                        step_result_base["selector_used_as_fallback"] = selector
+                        element_located_by = 'fallback_selector'
+                    else:
+                        logger.warning(f"Failed to locate element using fallback selector '{selector}' as well.")
 
-                    # 要素が見つかったスコープが現在の探索スコープと異なる場合、ターゲットを更新
-                    if id(found_scope) != id(current_target):
-                        found_scope_type = type(found_scope).__name__
-                        logger.info(f"要素発見スコープ({found_scope_type})が現在のスコープ({type(current_target).__name__})と異なるため、探索スコープを更新します。")
-                        # スタック管理: 現在のターゲットをスタックに追加 (重複回避)
-                        if id(current_target) not in [id(s) for s in iframe_stack]:
-                            iframe_stack.append(current_target)
-                        current_target = found_scope
-                    logger.info(f"最終的な単一操作対象スコープ: {type(current_target).__name__}")
+                # 3. target_hints も selector もなく、要素が必要な場合のエラーチェック
+                if not target_hints and not selector:
+                     raise ValueError(f"Action '{action}' requires 'target_hints' or 'selector'.")
 
-                elif action in multiple_elements_actions:
-                    logger.info(f"複数要素 '{selector}' を動的に探索します...")
-                    found_elements_list = await find_all_elements_dynamically(
-                        current_target, selector, max_depth=config.DYNAMIC_SEARCH_MAX_DEPTH, timeout=action_wait_time
-                    )
-                    if not found_elements_list:
-                        # 複数要素が見つからなくてもエラーとはせず、警告ログに留め、後続処理で空リストとして扱う
-                        logger.warning(f"要素 '{selector}' が現在のスコープおよび探索可能なiframe (深さ{config.DYNAMIC_SEARCH_MAX_DEPTH}まで) 内で見つかりませんでした。")
-                    # 複数要素の場合、見つかった各要素のスコープは異なる可能性があるため、current_target は更新しない
+                # --- 要素特定最終チェック ---
+                if not target_element:
+                    error_msg = f"Failed to locate required single element for action '{action}'."
+                    tried_hints = step_result_base.get("locator_attempts") is not None
+                    tried_fallback = step_result_base.get("selector_used_as_fallback") is not None
+                    original_selector = step_data.get("selector")
+                    if tried_hints and tried_fallback: error_msg += f" Tried target_hints and fallback selector '{step_result_base['selector_used_as_fallback']}'."
+                    elif tried_hints and not original_selector: error_msg += " Tried target_hints, but no fallback selector was provided."
+                    elif tried_hints: error_msg += f" Tried target_hints and fallback selector '{original_selector}'."
+                    elif original_selector: error_msg += f" Tried selector '{original_selector}'."
+                    raise PlaywrightError(error_msg) # エラータイプを PlaywrightError に
 
+            elif needs_multiple_elements:
+                if not selector: raise ValueError(f"Action '{action}' requires a 'selector'.")
+                logger.info(f"Locating multiple elements using selector '{selector}'...")
+                found_elements_list = await find_all_elements_dynamically(
+                    current_target, selector, max_depth=config.DYNAMIC_SEARCH_MAX_DEPTH, timeout=action_wait_time
+                )
+                if not found_elements_list: logger.warning(f"Element(s) for '{selector}' not found.")
+                step_result_base["selector"] = selector
+
+            # --- スコープ更新処理 ---
+            if needs_single_element and found_scope:
+                if id(found_scope) != id(current_target):
+                    logger.info(f"Scope updated to: {type(found_scope).__name__}")
+                    if id(current_target) not in [id(s) for s in iframe_stack]: iframe_stack.append(current_target)
+                    current_target = found_scope
+                logger.info(f"Final operating scope: {type(current_target).__name__}")
 
             # --- 各アクション実行 ---
-            action_result_details = {"selector": selector} if selector else {} # 結果にセレクター情報を含める
+            action_result_details = {} # 結果詳細用辞書
+            # locator情報が結果に含まれるように調整
+            if step_result_base.get("locator_hint_used"): action_result_details["locator_hint_used"] = step_result_base["locator_hint_used"]
+            elif step_result_base.get("selector_used_as_fallback"): action_result_details["selector"] = step_result_base["selector_used_as_fallback"]; action_result_details["locator_method"] = "fallback_selector"
+            elif step_result_base.get("selector"): action_result_details["selector"] = step_result_base["selector"]; action_result_details["locator_method"] = "selector"
 
             if action == "click":
-                if not element: raise ValueError("Click action requires an element, but it was not found.")
-                logger.info("要素をクリックします...")
-                context_for_click = root_page.context # 新しいページが開くイベントはルートページのコンテキストで捕捉
-                new_page: Optional[Page] = None
+                if not target_element: raise PlaywrightError("Click action failed: Element could not be located.")
+                logger.info("Clicking element...")
+                context_for_click = root_page.context; new_page: Optional[Page] = None
                 try:
-                    # 新しいページが開く可能性を考慮して待機 (タイムアウトは短めに設定)
                     async with context_for_click.expect_page(timeout=config.NEW_PAGE_EVENT_TIMEOUT) as new_page_info:
-                        await element.click(timeout=action_wait_time)
-                    # タイムアウト内に新しいページが開いた場合
-                    new_page = await new_page_info.value
-                    new_page_url = new_page.url
-                    logger.info(f"クリックにより新しいページが開きました: URL={new_page_url}")
-                    try:
-                        # 新しいページのロード完了を待つ (タイムアウトはアクション固有時間)
-                        await new_page.wait_for_load_state("load", timeout=action_wait_time)
-                        logger.info("新しいページのロードが完了しました。")
-                    except PlaywrightTimeoutError:
-                        logger.warning(f"新しいページのロード待機がタイムアウトしました ({action_wait_time}ms)。処理は続行します。")
-                    # 操作対象を新しいページに切り替え、iframeスタックをクリア
-                    root_page = new_page
-                    current_target = new_page
-                    current_context = new_page.context
-                    iframe_stack.clear()
-                    logger.info("スコープを新しいページにリセットしました。iframeスタックもクリアされました。")
+                        await target_element.click(timeout=action_wait_time)
+                    new_page = await new_page_info.value; new_page_url = new_page.url; logger.info(f"New page opened: {new_page_url}")
+                    try: await new_page.wait_for_load_state("load", timeout=action_wait_time)
+                    except PlaywrightTimeoutError: logger.warning(f"New page load timeout.")
+                    root_page = new_page; current_target = new_page; current_context = new_page.context; iframe_stack.clear()
                     action_result_details.update({"new_page_opened": True, "new_page_url": new_page_url})
-                    results.append({"step": step_num, "status": "success", "action": action, **action_result_details})
                 except PlaywrightTimeoutError:
-                    # expect_pageがタイムアウトした場合 (新しいページが開かなかった場合)
-                    logger.info(f"クリックは完了しましたが、{config.NEW_PAGE_EVENT_TIMEOUT}ms 以内に新しいページは開きませんでした。")
+                    logger.info(f"No new page opened within {config.NEW_PAGE_EVENT_TIMEOUT}ms timeout.")
                     action_result_details["new_page_opened"] = False
-                    results.append({"step": step_num, "status": "success", "action": action, **action_result_details})
-                except Exception as click_err:
-                    # クリック自体が失敗した場合など
-                    logger.error(f"クリック操作中に予期せぬエラーが発生しました: {click_err}", exc_info=True)
-                    raise click_err # エラーを再送出してステップ全体のエラーハンドリングに任せる
+                except Exception as click_err: logger.error(f"Click error: {click_err}", exc_info=True); raise click_err
+                results.append({**step_result_base, "status": "success", **action_result_details})
 
             elif action == "input":
-                 if not element: raise ValueError("Input action requires an element.")
-                 if value is None: raise ValueError("Input action requires 'value'.")
+                 if not target_element: raise PlaywrightError("Input action failed: Element could not be located.")
+                 if value is None: raise ValueError("Input requires 'value'.")
                  input_value_str = str(value)
                  logger.info(f"要素に '{input_value_str[:50]}{'...' if len(input_value_str) > 50 else ''}' を入力します...")
-                 # fill: 要素の内容をクリアしてから入力する
-                 await element.fill(input_value_str, timeout=action_wait_time)
-                 logger.info("入力が成功しました。")
-                 action_result_details["value"] = value # 結果には元の値を保持
-                 results.append({"step": step_num, "status": "success", "action": action, **action_result_details})
+                 try:
+                     await target_element.wait_for(state='visible', timeout=max(1000, action_wait_time // 3))
+                     #await target_element.wait_for(state='enabled', timeout=max(1000, action_wait_time // 3)) # Incorrect state
+                     logger.debug("Clicking element to ensure focus before input.")
+                     await target_element.click(timeout=max(1000, action_wait_time // 3))
+                     await target_element.fill(input_value_str, timeout=action_wait_time)
+                     await asyncio.sleep(0.1) # Short wait
+                     logger.info("入力が成功しました。")
+                     action_result_details["value"] = value
+                     results.append({**step_result_base, "status": "success", **action_result_details})
+                 except PlaywrightTimeoutError as e: logger.error(f"Input action timed out: {e}"); raise PlaywrightTimeoutError(f"Timeout during input: {e}") from e
+                 except Exception as e: logger.error(f"Error during input action: {e}", exc_info=True); raise PlaywrightError(f"Failed input: {e}") from e
 
             elif action == "hover":
-                 if not element: raise ValueError("Hover action requires an element.")
-                 logger.info("要素にマウスオーバーします...")
-                 await element.hover(timeout=action_wait_time)
-                 logger.info("ホバーが成功しました。")
-                 results.append({"step": step_num, "status": "success", "action": action, **action_result_details})
+                 if not target_element: raise PlaywrightError("Hover action failed: Element could not be located.")
+                 await target_element.hover(timeout=action_wait_time); logger.info("Hover success.")
+                 results.append({**step_result_base, "status": "success", **action_result_details})
 
             elif action == "get_inner_text":
-                 if not element: raise ValueError("Get innerText action requires an element.")
-                 logger.info("要素の innerText を取得します...")
-                 text = await element.inner_text(timeout=action_wait_time)
-                 text = text.strip() if text else "" # 前後の空白除去
-                 logger.info(f"取得テキスト(innerText): '{text[:100]}{'...' if len(text) > 100 else ''}'") # 長いテキストは省略
-                 action_result_details["text"] = text
-                 results.append({"step": step_num, "status": "success", "action": action, **action_result_details})
+                 if not target_element: raise PlaywrightError("Get innerText failed: Element could not be located.")
+                 text = await target_element.inner_text(timeout=action_wait_time); text = text.strip() if text else ""
+                 logger.info(f"Got innerText: '{text[:100]}...'"); action_result_details["text"] = text
+                 results.append({**step_result_base, "status": "success", **action_result_details})
 
             elif action == "get_text_content":
-                 if not element: raise ValueError("Get textContent action requires an element.")
-                 logger.info("要素の textContent を取得します...")
-                 text = await element.text_content(timeout=action_wait_time)
-                 text = text.strip() if text else "" # 前後の空白を除去
-                 logger.info(f"取得テキスト(textContent): '{text[:100]}{'...' if len(text) > 100 else ''}'")
-                 action_result_details["text"] = text
-                 results.append({"step": step_num, "status": "success", "action": action, **action_result_details})
+                 if not target_element: raise PlaywrightError("Get textContent failed: Element could not be located.")
+                 text = await target_element.text_content(timeout=action_wait_time); text = text.strip() if text else ""
+                 logger.info(f"Got textContent: '{text[:100]}...'"); action_result_details["text"] = text
+                 results.append({**step_result_base, "status": "success", **action_result_details})
 
             elif action == "get_inner_html":
-                 if not element: raise ValueError("Get innerHTML action requires an element.")
-                 logger.info("要素の innerHTML を取得します...")
-                 html_content = await element.inner_html(timeout=action_wait_time)
-                 logger.info(f"取得HTML(innerHTML):\n{html_content[:500]}{'...' if len(html_content) > 500 else ''}") # 先頭のみ表示
-                 action_result_details["html"] = html_content
-                 results.append({"step": step_num, "status": "success", "action": action, **action_result_details})
+                 if not target_element: raise PlaywrightError("Get innerHTML failed: Element could not be located.")
+                 html_content = await target_element.inner_html(timeout=action_wait_time)
+                 logger.info(f"Got innerHTML: {html_content[:500]}..."); action_result_details["html"] = html_content
+                 results.append({**step_result_base, "status": "success", **action_result_details})
 
             elif action == "get_attribute":
-                if not element: raise ValueError("Get attribute action requires an element.")
-                if not attribute_name: raise ValueError("Action 'get_attribute' requires 'attribute_name'.")
-                logger.info(f"要素の属性 '{attribute_name}' を取得します...")
-                attr_value = await element.get_attribute(attribute_name, timeout=action_wait_time)
-                pdf_text_content = None
-                processed_value = attr_value # 結果に含める値（URL変換やPDFテキストが入る可能性）
-
-                # --- href属性の場合の特別処理 ---
+                if not target_element: raise PlaywrightError("Get attribute failed: Element could not be located.")
+                if not attribute_name: raise ValueError("Get attribute requires 'attribute_name'.")
+                attr_value = await target_element.get_attribute(attribute_name, timeout=action_wait_time)
+                pdf_text_content = None; processed_value = attr_value
                 if attribute_name.lower() == 'href' and attr_value is not None:
-                    original_url = attr_value
-                    try:
-                        # 絶対URLに変換
-                        absolute_url = urljoin(current_base_url, original_url)
-                        if original_url != absolute_url:
-                            logger.info(f"  href属性値を絶対URLに変換: '{original_url}' -> '{absolute_url}'")
-                        processed_value = absolute_url # 結果には絶対URLを
+                     try:
+                         absolute_url = urljoin(current_base_url, attr_value); processed_value = absolute_url
+                         if absolute_url.lower().endswith('.pdf'):
+                             pdf_bytes = await utils.download_pdf_async(api_request_context, absolute_url)
+                             if pdf_bytes: pdf_text_content = await asyncio.to_thread(utils.extract_text_from_pdf_sync, pdf_bytes)
+                             else: pdf_text_content = "Error: PDF download failed."
+                     except Exception as url_e: logger.error(f"URL/PDF error: {url_e}"); pdf_text_content = f"Error: {url_e}"
+                logger.info(f"Got attribute '{attribute_name}': '{processed_value}'")
+                action_result_details.update({"attribute": attribute_name, "value": processed_value})
+                if pdf_text_content is not None: action_result_details["pdf_text"] = pdf_text_content
+                results.append({**step_result_base, "status": "success", **action_result_details})
 
-                        # PDFかどうかを判定して処理
-                        if isinstance(absolute_url, str) and absolute_url.lower().endswith('.pdf'):
-                            logger.info(f"  リンク先がPDFファイルです。ダウンロードとテキスト抽出を試みます: {absolute_url}")
-                            # PDFダウンロード (utilsを使用)
-                            pdf_bytes = await utils.download_pdf_async(api_request_context, absolute_url)
-                            if pdf_bytes:
-                                # PDFテキスト抽出 (utilsを使用, 同期関数を非同期実行)
-                                pdf_text_content = await asyncio.to_thread(utils.extract_text_from_pdf_sync, pdf_bytes)
-                                if isinstance(pdf_text_content, str) and pdf_text_content.startswith("Error:"):
-                                     logger.error(f"  PDFテキスト抽出エラー: {pdf_text_content}")
-                                else:
-                                     log_text = pdf_text_content[:200] + '...' if pdf_text_content and len(pdf_text_content) > 200 else pdf_text_content
-                                     logger.info(f"  PDFテキスト抽出完了 (先頭200文字): {log_text if log_text else 'None'}")
-                            else:
-                                pdf_text_content = "Error: PDF download failed or returned no data."
-                                logger.error(f"  PDFダウンロード失敗: {absolute_url}")
-                        else:
-                             logger.debug(f"  リンク先はPDFではありません ({absolute_url})。")
-                    except Exception as url_e:
-                        error_detail = f"Error processing URL or PDF: {url_e}"
-                        logger.error(f"  URL処理またはPDF処理中にエラーが発生しました (URL: '{original_url}'): {url_e}", exc_info=True)
-                        pdf_text_content = error_detail # エラー情報を結果に含める
-
-                logger.info(f"取得した属性値 ({attribute_name}): '{processed_value}'")
-                action_result_details.update({"attribute": attribute_name, "value": processed_value}) # 結果には処理後の値を保存
-                if pdf_text_content is not None:
-                    action_result_details["pdf_text"] = pdf_text_content # PDFテキストも結果に含める
-                results.append({"step": step_num, "status": "success", "action": action, **action_result_details})
-
-            # --- get_all_attributes 修正版 ---
             elif action == "get_all_attributes":
-                if not selector: raise ValueError("Action 'get_all_attributes' requires 'selector'.")
-                if not attribute_name: raise ValueError("Action 'get_all_attributes' requires 'attribute_name'.")
-
-                if not found_elements_list:
-                    logger.warning(f"動的探索で要素 '{selector}' が見つからなかったため、属性/コンテンツ取得をスキップします。")
-                    action_result_details["results_count"] = 0 # 結果件数を0にする
-                    if attribute_name.lower() in ['href', 'pdf', 'content', 'mail']:
-                        action_result_details["url_list"] = []
-                    if attribute_name.lower() == 'pdf': action_result_details["pdf_texts"] = []
-                    if attribute_name.lower() == 'content': action_result_details["scraped_texts"] = []
-                    if attribute_name.lower() == 'mail': action_result_details["extracted_emails"] = []
-                    if attribute_name.lower() not in ['href', 'pdf', 'content', 'mail']:
-                        action_result_details["attribute_list"] = []
+                if not selector: raise ValueError("get_all_attributes requires 'selector'.")
+                if not attribute_name: raise ValueError("get_all_attributes requires 'attribute_name'.")
+                if not found_elements_list: logger.warning(f"No elements for '{selector}'."); action_result_details["results_count"] = 0
                 else:
-                    num_found = len(found_elements_list)
-                    logger.info(f"動的探索で見つかった {num_found} 個の要素から属性/コンテンツ '{attribute_name}' を取得します。")
-
-                    # 結果格納用リスト
-                    url_list_for_file: List[Optional[str]] = []
-                    pdf_texts_list_for_file: List[Optional[str]] = []
-                    scraped_texts_list_for_file: List[Optional[str]] = []
-                    email_list_for_file: List[str] = [] # mailモード用 (ドメインユニーク)
-                    generic_attribute_list_for_file: List[Optional[str]] = []
-
-                    # --- 属性名に応じて処理を分岐 ---
-                    # href, pdf, content モード (処理を共通化)
-                    if attribute_name.lower() in ['href', 'pdf', 'content', 'mail']: # <<< mail を追加
-                        logger.info(f"モード '{attribute_name.lower()}': href属性を取得し、絶対URLに変換、必要に応じてコンテンツを取得します...")
-
-                        CONCURRENT_LIMIT = 5 # 同時実行数
-                        semaphore = asyncio.Semaphore(CONCURRENT_LIMIT)
-                        logger.info(f"URLアクセス/コンテンツ取得の同時実行数を {CONCURRENT_LIMIT} に制限します。")
-
-                        # 個々の要素から属性/コンテンツを取得する内部関数
-                        async def process_single_element_for_href_related(
-                            locator: Locator, index: int, base_url: str, attr_mode: str, sem: asyncio.Semaphore
-                        ) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[List[str]]]: # <<< mail 用のリストを追加
-                            """ 1要素のhrefを取得し、モードに応じてPDF/コンテンツ/メールも取得 (セマフォで同時実行制御) """
-                            original_href: Optional[str] = None
-                            absolute_url: Optional[str] = None
-                            pdf_text: Optional[str] = None
-                            scraped_text: Optional[str] = None
-                            emails_from_page: Optional[List[str]] = None # <<< mail 用
-
-                            async with sem: # セマフォで同時実行数を制御
+                    num_found = len(found_elements_list); logger.info(f"Getting '{attribute_name}' from {num_found} elements...")
+                    url_list, pdf_list, content_list, mail_list, generic_list = [],[],[],[],[]
+                    if attribute_name.lower() in ['href', 'pdf', 'content', 'mail']:
+                        CONCURRENT_LIMIT=5; semaphore=asyncio.Semaphore(CONCURRENT_LIMIT)
+                        async def process_single_element_for_href_related(locator: Locator, index: int, base_url: str, attr_mode: str, sem: asyncio.Semaphore) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[List[str]]]:
+                            original_href: Optional[str] = None; absolute_url: Optional[str] = None
+                            pdf_text: Optional[str] = None; scraped_text: Optional[str] = None
+                            emails_from_page: Optional[List[str]] = None
+                            async with sem:
                                 try:
-                                    logger.debug(f"  [{index+1}/{num_found}] Processing started ({attr_mode})...")
                                     href_timeout = max(500, action_wait_time // num_found if num_found > 5 else action_wait_time // 3)
                                     original_href = await locator.get_attribute("href", timeout=href_timeout)
+                                    if original_href is None: return None, None, None, None
+                                    try: absolute_url = urljoin(base_url, original_href); parsed_url = urlparse(absolute_url)
+                                    except Exception: return f"Error converting URL: {original_href}", None, None, None
+                                    if parsed_url.scheme not in ['http', 'https']: return absolute_url, None, None, None # Return URL only if not HTTP/S
 
-                                    if original_href is None:
-                                        logger.debug(f"  [{index+1}/{num_found}] href属性が見つかりません。")
-                                        return None, None, None, None # URLなし
-
-                                    # 絶対URL変換
-                                    try:
-                                        absolute_url = urljoin(base_url, original_href)
-                                        # URLスキーマが http/https でない場合はスキップ (javascript: mailto: など)
-                                        parsed_url = urlparse(absolute_url)
-                                        if parsed_url.scheme not in ['http', 'https']:
-                                            logger.debug(f"  [{index+1}/{num_found}] スキップ (非HTTP/HTTPS URL): {absolute_url}")
-                                            return absolute_url, None, None, None # URLは返す
-                                    except Exception as url_conv_e:
-                                         logger.warning(f"  [{index+1}/{num_found}] 絶対URL変換エラー ({original_href}): {url_conv_e}")
-                                         return f"Error converting URL: {original_href}", None, None, None # エラーURL
-
-                                    # pdf モードの場合
                                     if attr_mode == 'pdf' and absolute_url.lower().endswith('.pdf'):
-                                        pdf_start = time.monotonic()
-                                        pdf_bytes = await utils.download_pdf_async(api_request_context, absolute_url)
-                                        if pdf_bytes:
-                                            pdf_text = await asyncio.to_thread(utils.extract_text_from_pdf_sync, pdf_bytes)
-                                        else:
-                                            pdf_text = "Error: PDF download failed or returned no data."
-                                        pdf_elapsed = (time.monotonic() - pdf_start) * 1000
-                                        logger.info(f"  [{index+1}/{num_found}] PDF処理完了 ({pdf_elapsed:.0f}ms) URL: {absolute_url}")
-
-                                    # content モードの場合 (PDF以外)
+                                         pdf_bytes = await utils.download_pdf_async(api_request_context, absolute_url)
+                                         if pdf_bytes: pdf_text = await asyncio.to_thread(utils.extract_text_from_pdf_sync, pdf_bytes)
+                                         else: pdf_text = "Error: PDF download failed."
                                     elif attr_mode == 'content' and not absolute_url.lower().endswith('.pdf'):
-                                        content_start = time.monotonic()
-                                        success, content_or_error = await get_page_inner_text(current_context, absolute_url, action_wait_time)
-                                        scraped_text = content_or_error
-                                        content_elapsed = (time.monotonic() - content_start) * 1000
-                                        logger.info(f"  [{index+1}/{num_found}] Content取得試行完了 ({content_elapsed:.0f}ms) URL: {absolute_url} Success: {success}")
-
-                                    # mail モードの場合 (PDFかどうかは問わない)
-                                    elif attr_mode == 'mail':
-                                         mail_start = time.monotonic()
-                                         # ヘルパー関数を呼び出し
-                                         emails_from_page = await _extract_emails_from_page_async(current_context, absolute_url, action_wait_time)
-                                         mail_elapsed = (time.monotonic() - mail_start) * 1000
-                                         logger.info(f"  [{index+1}/{num_found}] Mail抽出試行完了 ({mail_elapsed:.0f}ms) URL: {absolute_url} Found: {len(emails_from_page) if emails_from_page else 0}")
-
-                                    logger.debug(f"  [{index+1}/{num_found}] Processing finished. URL: {absolute_url}")
-                                    return absolute_url, pdf_text, scraped_text, emails_from_page # <<< mail 結果を返す
-
-                                except PlaywrightTimeoutError:
-                                    logger.warning(f"  [{index+1}/{num_found}] href属性取得タイムアウト ({href_timeout}ms)。")
-                                    return f"Error: Timeout getting href", None, None, None
-                                except Exception as e:
-                                    logger.warning(f"  [{index+1}/{num_found}] href/コンテンツ/メール取得中に予期せぬエラー: {type(e).__name__} - {e}", exc_info=True)
-                                    return f"Error: {type(e).__name__} - {e}", None, None, None
-
-                        # --- 見つかった全要素に対して並行処理 ---
-                        process_tasks = [
-                            process_single_element_for_href_related(loc, idx, current_base_url, attribute_name.lower(), semaphore)
-                            for idx, (loc, _) in enumerate(found_elements_list)
-                        ]
-                        results_tuples = await asyncio.gather(*process_tasks)
-
-                        # 結果をリストに格納 & mailモードのドメイン重複排除
-                        all_extracted_emails_flat: List[str] = [] # mailモード用: 全メールアドレス（ドメイン重複排除前）
-                        processed_domains: Set[str] = set() # mailモード用: 処理済みドメイン
-
-                        for abs_url, pdf_content, scraped_content, emails_list in results_tuples:
-                            url_list_for_file.append(abs_url) # URLは常に追加
-                            if attribute_name.lower() == 'pdf':
-                                pdf_texts_list_for_file.append(pdf_content)
-                            if attribute_name.lower() == 'content':
-                                scraped_texts_list_for_file.append(scraped_content)
-                            if attribute_name.lower() == 'mail' and emails_list:
-                                all_extracted_emails_flat.extend(emails_list) # まずフラットリストに追加
-
-                        # --- mail モードのドメイン重複排除処理 ---
+                                         success, content_or_error = await get_page_inner_text(current_context, absolute_url, action_wait_time); scraped_text = content_or_error
+                                    elif attr_mode == 'mail': emails_from_page = await _extract_emails_from_page_async(current_context, absolute_url, action_wait_time)
+                                    return absolute_url, pdf_text, scraped_text, emails_from_page
+                                except Exception as e: return f"Error: {type(e).__name__}", None, None, None
+                        tasks = [process_single_element_for_href_related(loc, idx, current_base_url, attribute_name.lower(), semaphore) for idx, (loc, _) in enumerate(found_elements_list)]
+                        results_tuples = await asyncio.gather(*tasks)
+                        flat_mails=[]; processed_domains=set()
+                        for url, pdf, content, mails in results_tuples:
+                            url_list.append(url)
+                            if attribute_name.lower() == 'pdf': pdf_list.append(pdf)
+                            if attribute_name.lower() == 'content': content_list.append(content)
+                            if attribute_name.lower() == 'mail' and mails: flat_mails.extend(mails)
                         if attribute_name.lower() == 'mail':
-                            logger.info(f"メールアドレスのドメイン重複排除を開始 (候補総数: {len(all_extracted_emails_flat)})...")
-                            for email in all_extracted_emails_flat:
-                                if isinstance(email, str) and '@' in email:
-                                    try:
-                                        domain = email.split('@', 1)[1].lower() # ドメイン部分を小文字で取得
-                                        if domain and domain not in processed_domains:
-                                            email_list_for_file.append(email) # ユニークドメインのメールを最終リストへ
-                                            processed_domains.add(domain) # ドメインを処理済みセットへ
-                                            logger.debug(f"    Added unique domain email: {email}")
-                                        # else: logger.debug(f"    Skipping duplicate domain email: {email}")
-                                    except IndexError:
-                                        logger.warning(f"    Invalid email format skipped: {email}")
-                                else:
-                                     logger.debug(f"    Skipping invalid or non-string email entry: {email}")
-                            logger.info(f"ドメイン重複排除完了。ユニークドメインメールアドレス数: {len(email_list_for_file)}")
-
-                        # 結果を action_result_details に格納
-                        action_result_details["attribute"] = attribute_name
-                        action_result_details["url_list"] = url_list_for_file # 常にURLリストを含める
-                        action_result_details["results_count"] = len(url_list_for_file) # 処理したURL数をカウント
-                        if attribute_name.lower() == 'pdf':
-                             action_result_details["pdf_texts"] = pdf_texts_list_for_file
-                        if attribute_name.lower() == 'content':
-                             action_result_details["scraped_texts"] = scraped_texts_list_for_file
-                        if attribute_name.lower() == 'mail':
-                             action_result_details["extracted_emails"] = email_list_for_file # ドメインユニークなリスト
-
-                        if len(email_list_for_file) > 0:
-                            with open("output/server_mails.txt", "a", encoding="utf-8") as f:
-                                f.write('\n'.join(email_list_for_file) + '\n')  # 各要素を改行で結合して書き込む
-
-                    # --- href, pdf, content, mail 以外の通常の属性取得 ---
-                    else:
-                        logger.info(f"指定された属性 '{attribute_name}' を取得します...")
-                        # 属性値を取得する内部関数
-                        async def get_single_attr(locator: Locator, attr_name: str, index: int) -> Optional[str]:
-                            try:
-                                attr_timeout = max(500, action_wait_time // num_found if num_found > 5 else action_wait_time // 3)
-                                return await locator.get_attribute(attr_name, timeout=attr_timeout)
-                            except PlaywrightTimeoutError:
-                                logger.warning(f"  [{index+1}/{num_found}] 属性 '{attr_name}' 取得タイムアウト ({attr_timeout}ms)。")
-                                return f"Error: Timeout getting attribute '{attr_name}'"
-                            except Exception as e:
-                                logger.warning(f"  [{index+1}/{num_found}] 属性 '{attr_name}' 取得中にエラー: {type(e).__name__}")
-                                return f"Error: {type(e).__name__} getting attribute '{attr_name}'"
-
-                        # 並行処理で属性を取得
-                        attr_tasks = [
-                            get_single_attr(loc, attribute_name, idx)
-                            for idx, (loc, _) in enumerate(found_elements_list)
-                        ]
-                        generic_attribute_list_for_file = await asyncio.gather(*attr_tasks)
-
-                        action_result_details.update({
-                            "attribute": attribute_name,
-                            "attribute_list": generic_attribute_list_for_file,
-                            "results_count": len(generic_attribute_list_for_file)
-                        })
-                        logger.info(f"取得した属性値リスト ({len(generic_attribute_list_for_file)}件)")
-
-                # 最後に結果を追加
-                results.append({"step": step_num, "status": "success", "action": action, **action_result_details})
-            # --- ここまで get_all_attributes の修正 ---
+                             unique_emails_this_step = []
+                             for email in flat_mails:
+                                 if isinstance(email, str) and '@' in email:
+                                     try: domain = email.split('@',1)[1].lower();
+                                     except IndexError: continue
+                                     if domain and domain not in processed_domains: unique_emails_this_step.append(email); processed_domains.add(domain)
+                             mail_list = unique_emails_this_step # Use the unique list for results
+                             # --- ★ メール保存処理を _extract_emails_from_page_async 内に移動 ★ ---
+                        action_result_details["results_count"] = len(url_list)
+                        if attribute_name.lower() in ['href', 'pdf', 'content', 'mail']: action_result_details["url_list"] = url_list
+                        if attribute_name.lower() == 'pdf': action_result_details["pdf_texts"] = pdf_list
+                        if attribute_name.lower() == 'content': action_result_details["scraped_texts"] = content_list
+                        if attribute_name.lower() == 'mail': action_result_details["extracted_emails"] = mail_list # 結果にはドメインユニークリストを記録
+                    else: # 通常属性
+                        async def get_single_attr(locator: Locator, attr_name: str, index: int, timeout_ms: int) -> Optional[str]:
+                            try: return await locator.get_attribute(attr_name, timeout=timeout_ms)
+                            except PlaywrightTimeoutError: logger.warning(f"Timeout getting attr '{attr_name}' for element {index}"); return f"Error: Timeout"
+                            except Exception as e: logger.warning(f"Error getting attr '{attr_name}' for element {index}: {type(e).__name__}"); return f"Error: {type(e).__name__}"
+                        timeout = max(500, action_wait_time // num_found if num_found > 5 else action_wait_time // 3)
+                        tasks = [get_single_attr(loc, attribute_name, idx, timeout) for idx, (loc, _) in enumerate(found_elements_list)]
+                        generic_list = await asyncio.gather(*tasks)
+                        action_result_details.update({"attribute": attribute_name, "attribute_list": generic_list, "results_count": len(generic_list)})
+                    action_result_details["attribute"] = attribute_name
+                results.append({**step_result_base, "status": "success", **action_result_details})
 
             elif action == "get_all_text_contents":
-                if not selector: raise ValueError("Action 'get_all_text_contents' requires 'selector'.")
+                if not selector: raise ValueError("get_all_text_contents requires 'selector'.")
                 text_list: List[Optional[str]] = []
-                if not found_elements_list:
-                    logger.warning(f"動的探索で要素 '{selector}' が見つからなかったため、テキスト取得をスキップします。")
-                    action_result_details["results_count"] = 0
+                if not found_elements_list: logger.warning(f"No elements for '{selector}'."); action_result_details["results_count"] = 0
                 else:
-                    num_found = len(found_elements_list)
-                    logger.info(f"動的探索で見つかった {num_found} 個の要素から textContent を取得します。")
-                    # textContent を取得する内部関数
-                    async def get_single_text(locator: Locator, index: int) -> Optional[str]:
-                        try:
-                            text_timeout = max(500, action_wait_time // num_found if num_found > 5 else action_wait_time // 3)
-                            text = await locator.text_content(timeout=text_timeout)
-                            return text.strip() if text else "" # 前後空白除去
-                        except PlaywrightTimeoutError:
-                             logger.warning(f"  [{index+1}/{num_found}] textContent取得タイムアウト ({text_timeout}ms)。")
-                             return "Error: Timeout getting textContent"
-                        except Exception as e:
-                            logger.warning(f"  [{index+1}/{num_found}] textContent 取得中にエラー: {type(e).__name__}")
-                            return f"Error: {type(e).__name__} getting textContent"
-
-                    # 並行処理でテキストを取得
-                    get_text_tasks = [
-                        get_single_text(loc, idx) for idx, (loc, _) in enumerate(found_elements_list)
-                    ]
-                    text_list = await asyncio.gather(*get_text_tasks)
-                    logger.info(f"取得したテキストリスト ({len(text_list)}件)")
+                    num_found = len(found_elements_list); logger.info(f"Getting textContent from {num_found} elements...")
+                    async def get_single_text(locator: Locator, index: int, timeout_ms: int) -> Optional[str]:
+                        try: text = await locator.text_content(timeout=timeout_ms); return text.strip() if text else ""
+                        except PlaywrightTimeoutError: logger.warning(f"Timeout getting text for element {index}"); return "Error: Timeout"
+                        except Exception as e: logger.warning(f"Error getting text for element {index}: {type(e).__name__}"); return f"Error: {type(e).__name__}"
+                    timeout = max(500, action_wait_time // num_found if num_found > 5 else action_wait_time // 3)
+                    tasks = [get_single_text(loc, idx, timeout) for idx, (loc, _) in enumerate(found_elements_list)]
+                    text_list = await asyncio.gather(*tasks)
                     action_result_details["results_count"] = len(text_list)
-
                 action_result_details["text_list"] = text_list
-                results.append({"step": step_num, "status": "success", "action": action, **action_result_details})
+                results.append({**step_result_base, "status": "success", **action_result_details})
 
             elif action == "wait_visible":
-                # 要素探索自体が required_state='visible' で行われているため、
-                # ここに到達した時点で要素は可視のはず。ログのみ。
-                if not element: raise ValueError("Wait visible action requires an element.")
-                logger.info("要素が表示されていることを確認しました (動的探索時に確認済み)。")
-                results.append({"step": step_num, "status": "success", "action": action, **action_result_details})
+                if not target_element: raise PlaywrightError("Wait visible failed: Element could not be located.")
+                logger.info("Element visibility confirmed (likely during location).")
+                results.append({**step_result_base, "status": "success", **action_result_details})
 
             elif action == "select_option":
-                  if not element: raise ValueError("Select option action requires an element.")
-                  if option_type not in ['value', 'index', 'label'] or option_value is None:
-                       raise ValueError("Invalid 'option_type' or 'option_value' for select_option action.")
-                  logger.info(f"ドロップダウンを選択します (Type: {option_type}, Value: '{option_value}')...")
-                  # select_option は内部で要素が選択可能になるのを待つ
-                  if option_type == 'value':
-                      await element.select_option(value=str(option_value), timeout=action_wait_time)
-                  elif option_type == 'index':
-                      try: index_val = int(option_value)
-                      except (ValueError, TypeError): raise ValueError("Option type 'index' requires an integer value.")
-                      await element.select_option(index=index_val, timeout=action_wait_time)
-                  elif option_type == 'label':
-                      await element.select_option(label=str(option_value), timeout=action_wait_time)
-                  logger.info("ドロップダウンの選択が成功しました。")
+                  if not target_element: raise PlaywrightError("Select option failed: Element could not be located.")
+                  if option_type not in ['value', 'index', 'label'] or option_value is None: raise ValueError("Invalid option_type/value.")
+                  logger.info(f"Selecting option (Type: {option_type}, Value: '{option_value}')...")
+                  if option_type == 'value': await target_element.select_option(value=str(option_value), timeout=action_wait_time)
+                  elif option_type == 'index': await target_element.select_option(index=int(option_value), timeout=action_wait_time)
+                  elif option_type == 'label': await target_element.select_option(label=str(option_value), timeout=action_wait_time)
+                  logger.info("Select option success.")
                   action_result_details.update({"option_type": option_type, "option_value": option_value})
-                  results.append({"step": step_num, "status": "success", "action": action, **action_result_details})
+                  results.append({**step_result_base, "status": "success", **action_result_details})
 
             elif action == "scroll_to_element":
-                   if not element: raise ValueError("Scroll action requires an element.")
-                   logger.info("要素が表示されるまでスクロールします...")
-                   # scroll_into_view_if_needed は要素がビューポートに入るようにスクロールする
-                   await element.scroll_into_view_if_needed(timeout=action_wait_time)
-                   await asyncio.sleep(0.3) # スクロール後の安定待ち
-                   logger.info("要素へのスクロールが成功しました。")
-                   results.append({"step": step_num, "status": "success", "action": action, **action_result_details})
+                   if not target_element: raise PlaywrightError("Scroll action failed: Element could not be located.")
+                   await target_element.scroll_into_view_if_needed(timeout=action_wait_time); await asyncio.sleep(0.3); logger.info("Scroll success.")
+                   results.append({**step_result_base, "status": "success", **action_result_details})
 
             elif action == "screenshot":
-                  # ファイル名の決定 (valueがあればそれ、なければデフォルト名)
                   filename_base = str(value).strip() if value else f"screenshot_step{step_num}"
-                  # 拡張子がなければ .png を追加
                   filename = f"{filename_base}.png" if not filename_base.lower().endswith(('.png', '.jpg', '.jpeg')) else filename_base
-                  screenshot_path = os.path.join(config.DEFAULT_SCREENSHOT_DIR, filename)
-                  # ディレクトリが存在しない場合は作成
-                  os.makedirs(config.DEFAULT_SCREENSHOT_DIR, exist_ok=True)
-                  logger.info(f"スクリーンショットを '{screenshot_path}' に保存します...")
-                  if element: # 要素が指定されていれば要素のスクリーンショット
-                       logger.info("要素のスクリーンショットを取得します...")
-                       await element.screenshot(path=screenshot_path, timeout=action_wait_time)
-                       logger.info("要素のスクリーンショットを保存しました。")
-                  else: # 要素が指定されていなければページ全体
-                       logger.info("ページ全体のスクリーンショットを取得します...")
-                       # ページ全体は時間がかかる可能性があるのでタイムアウトを少し長くする
-                       await root_page.screenshot(path=screenshot_path, full_page=True, timeout=action_wait_time*2)
-                       logger.info("ページ全体のスクリーンショットを保存しました。")
-                  action_result_details["filename"] = screenshot_path # 結果にファイルパスを含める
-                  results.append({"step": step_num, "status": "success", "action": action, **action_result_details})
+                  screenshot_path = os.path.join(config.DEFAULT_SCREENSHOT_DIR, filename); os.makedirs(config.DEFAULT_SCREENSHOT_DIR, exist_ok=True)
+                  logger.info(f"Saving screenshot to '{screenshot_path}'...")
+                  if target_element: await target_element.screenshot(path=screenshot_path, timeout=action_wait_time); logger.info("Element screenshot saved.")
+                  else: await root_page.screenshot(path=screenshot_path, full_page=True, timeout=action_wait_time*2); logger.info("Page screenshot saved.")
+                  action_result_details["filename"] = screenshot_path
+                  results.append({**step_result_base, "status": "success", **action_result_details})
 
-            else:
-                  known_actions = [
-                      "click", "input", "hover", "get_inner_text", "get_text_content",
-                      "get_inner_html", "get_attribute", "get_all_attributes", "get_all_text_contents",
-                      "wait_visible", "select_option", "screenshot", "scroll_page_to_bottom",
-                      "scroll_to_element", "wait_page_load", "sleep", "switch_to_iframe",
-                      "switch_to_parent_frame"
-                  ]
-                  if action not in known_actions:
-                     logger.warning(f"未定義または不明なアクション '{action}' です。このステップはスキップされます。")
-                     results.append({"step": step_num, "status": "skipped", "action": action, "message": f"Undefined action: {action}"})
+            else: # 未知のアクション
+                known_actions = single_element_actions + multiple_elements_actions + \
+                                ["switch_to_iframe", "switch_to_parent_frame", "wait_page_load",
+                                 "sleep", "scroll_page_to_bottom", "screenshot"]
+                if action not in known_actions:
+                     logger.warning(f"Undefined action '{action}'. Skipping.")
+                     results.append({**step_result_base, "status": "skipped", "message": f"Undefined action: {action}"})
+                     continue # 次のステップへ
+
 
         # --- ステップごとのエラーハンドリング ---
-        except (PlaywrightTimeoutError, PlaywrightError, ValueError, Exception) as e:
-            error_message = f"ステップ {step_num} ({action}) の実行中にエラーが発生しました: {type(e).__name__} - {e}"
-            logger.error(error_message, exc_info=True) # スタックトレース付きでログ出力
+        except (PlaywrightTimeoutError, PlaywrightError, ValueError, IndexError, Exception) as e:
+            error_message = f"ステップ {step_num} ({action}) エラー: {type(e).__name__} - {e}"
+            logger.error(error_message, exc_info=True)
             error_screenshot_path = None
-            # エラー発生時のスクリーンショットを試みる
             if root_page and not root_page.is_closed():
                  timestamp = time.strftime("%Y%m%d_%H%M%S")
-                 error_ss_filename = f"error_step{step_num}_{timestamp}.png"
-                 error_ss_path = os.path.join(config.DEFAULT_SCREENSHOT_DIR, error_ss_filename)
+                 error_ss_path = os.path.join(config.DEFAULT_SCREENSHOT_DIR, f"error_step{step_num}_{timestamp}.png")
                  try:
                      os.makedirs(config.DEFAULT_SCREENSHOT_DIR, exist_ok=True)
-                     # エラー時のスクショはタイムアウト短め、フルページで試す
                      await root_page.screenshot(path=error_ss_path, full_page=True, timeout=10000)
-                     logger.info(f"エラー発生時のスクリーンショットを保存しました: {error_ss_path}")
-                     error_screenshot_path = error_ss_path
-                 except Exception as ss_e:
-                     logger.error(f"エラー発生時のスクリーンショット保存に失敗しました: {ss_e}")
-            elif root_page and root_page.is_closed():
-                 # ページが閉じられている場合、エラーメッセージに追記
-                 error_message += " (Note: Root page was closed during execution, possibly due to an unexpected navigation or crash)"
-                 logger.warning("根本原因: ルートページが閉じられた可能性があります。")
+                     error_screenshot_path = error_ss_path; logger.info(f"Error screenshot saved: {error_ss_path}")
+                 except Exception as ss_e: logger.error(f"Failed to save error screenshot: {ss_e}")
 
-            # エラー情報を結果リストに追加
             error_details = {
-                "step": step_num,
+                **step_result_base,
                 "status": "error",
-                "action": action,
-                "selector": selector, # エラー発生時のセレクターも記録
-                "message": str(e), # エラーメッセージ本文
-                "full_error": error_message, # より詳細なエラー情報 (スタックトレースはログのみ)
-                "traceback": traceback.format_exc() # スタックトレースも結果に含める（デバッグ用）
+                "selector": selector, "target_hints": target_hints, "locator_attempts": locator_attempt_logs,
+                "message": str(e), "full_error": error_message, "traceback": traceback.format_exc(),
             }
-            if error_screenshot_path:
-                error_details["error_screenshot"] = error_screenshot_path
+            if error_screenshot_path: error_details["error_screenshot"] = error_screenshot_path
             results.append(error_details)
-            return False, results # Falseを返して処理中断
+            return False, results # 処理中断
 
-    # 全てのステップが正常に完了した場合
+    # --- 全ステップ完了 ---
+    logger.info("All steps processed.")
     return True, results
+# --- ▲▲▲ execute_actions_async 本体 (ここまで) ▲▲▲ ---

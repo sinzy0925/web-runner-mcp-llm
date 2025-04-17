@@ -1,0 +1,132 @@
+{
+  "target_url": "https://www.google.co.jp/",
+  "actions": [
+    {
+      "memo": "検索ボックスに入力",
+      "action": "input",
+      "selector": "textarea[aria-label=\"検索\"]",
+      "target_hints": [
+        {
+          "type": "aria_label",
+          "value": "検索",
+          "confidence": "high"
+        },
+        {
+          "type": "css_selector_candidate",
+          "value": "textarea[aria-label=\"検索\"]",
+          "confidence": "medium"
+        },
+        {
+          "type": "css_selector_candidate",
+          "value": "textarea.gLFyf",
+          "confidence": "medium"
+        },
+        {
+          "type": "css_selector_candidate",
+          "value": "#APjFqb",
+          "confidence": "low"
+        }
+      ],
+      "value": "Playwrightによる自動テスト"
+    },
+    {
+      "memo": "Google検索ボタンをクリック",
+      "action": "click",
+      "selector": "input[aria-label=\"Google 検索\"]",
+      "target_hints": [
+        {
+          "type": "aria_label",
+          "value": "Google 検索",
+          "confidence": "high"
+        },
+        {
+          "type": "role_and_text",
+          "name": "Google 検索",
+          "value": "Google 検索",
+          "confidence": "high"
+        },
+        {
+          "type": "css_selector_candidate",
+          "value": "input[name=\"btnK\"]",
+          "confidence": "medium"
+        },
+        {
+          "type": "nth_child",
+          "common_selector": "div.FPdoLc > center > input",
+          "index": 0,
+          "confidence": "medium"
+        },
+        {
+          "type": "nth_child",
+          "common_selector": "div.lJ9FBc > center > input",
+          "index": 0,
+          "confidence": "medium"
+        },
+        {
+          "type": "text_exact",
+          "value": "Google 検索",
+          "confidence": "low"
+        }
+      ],
+      "wait_time_ms": 7000
+    },
+    {
+      "memo": "「次へ」リンクをクリック",
+      "action": "click",
+      "selector": "a[aria-label='次へ']",
+      "target_hints": [
+        {
+          "type": "aria_label",
+          "value": "次へ",
+          "confidence": "high"
+        },
+        {
+          "type": "text_exact",
+          "value": "次へ",
+          "confidence": "medium"
+        },
+        {
+          "type": "css_selector_candidate",
+          "value": "a[aria-label='次へ']",
+          "confidence": "low"
+        },
+        {
+          "type": "css_selector_candidate",
+          "value": "div[role='navigation'] a:last-child",
+          "confidence": "low"
+        }
+      ],
+      "wait_time_ms": 7000
+    },
+    {
+      "memo": "最初の検索結果リンクをクリック",
+      "action": "click",
+      "selector": "a.zReHs",
+      "target_hints": [
+        {
+          "type": "nth_child",
+          "value": null,
+          "common_selector": "div.MjjYud > div > div > div > div > div > div.yuRUbf > div.b8lM7 > span > a",
+          "index": 0,
+          "confidence": "high"
+        },
+        {
+          "type": "css_selector_candidate",
+          "value": "div.MjjYud:nth-child(1) a.zReHs",
+          "confidence": "medium"
+        },
+        {
+          "type": "css_selector_candidate",
+          "value": "#rso > div.MjjYud:nth-child(1) a",
+          "confidence": "medium"
+        },
+        {
+          "type": "css_selector_candidate",
+          "value": "a.zReHs",
+          "confidence": "low"
+        }
+      ],
+      "wait_time_ms": 10000
+    }
+  ]
+}

@@ -3,13 +3,15 @@
 import json
 import logging # logging をインポート
 import traceback # 詳細なエラー出力用
-from typing import Any, Dict, List, Literal, Union
 
 # MCP SDK と Pydantic をインポート
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 from mcp.server.fastmcp.utilities.logging import configure_logging # MCPのログ設定関数
 from pydantic import BaseModel, Field, HttpUrl
+
+# ▼▼▼ typing から List, Dict, Any, Optional をインポート (必要なら) ▼▼▼
+from typing import Any, Dict, List, Literal, Union, Optional
 
 # --- ▼▼▼ 修正 ▼▼▼ ---
 # 分割した Web-Runner のコア関数と設定をインポート
@@ -28,23 +30,30 @@ except ImportError as import_err:
 # --- ロガー取得 ---
 logger = logging.getLogger(__name__)
 
-# --- 入力スキーマ定義 (変更なし) ---
+# --- ▼▼▼ ActionStep モデルを修正 ▼▼▼ ---
 class ActionStep(BaseModel):
     action: str = Field(..., description="実行するアクション名 (例: 'click', 'input', 'get_text_content')")
-    selector: str | None = Field(None, description="アクション対象のCSSセレクター (要素操作アクションの場合)")
+    memo: str | None = Field(None, description="アクションに関するメモ (任意)") # memoも追加しておくと便利
+    selector: str | None = Field(None, description="従来のCSSセレクター (target_hintsがない場合に使用)")
+    # --- ▼▼▼ target_hints フィールドを追加 ▼▼▼ ---
+    target_hints: Optional[List[Dict[str, Any]]] = Field(None, description="LLMが生成した要素特定情報の候補リスト")
+    # --- ▲▲▲ target_hints フィールドを追加 ▲▲▲ ---
     iframe_selector: str | None = Field(None, description="iframeを対象とする場合のCSSセレクター (switch_to_iframeの場合)")
-    value: str | float | int | bool | None = Field(None, description="入力する値 (input) や待機時間 (sleep)、スクリーンショットファイル名など")
+    value: str | float | int | bool | None = Field(None, description="入力値、待機時間、ファイル名など")
     attribute_name: str | None = Field(None, description="取得する属性名 (get_attribute, get_all_attributesの場合)")
     option_type: Literal['value', 'index', 'label'] | None = Field(None, description="ドロップダウン選択方法 (select_optionの場合)")
     option_value: str | int | None = Field(None, description="選択する値/インデックス/ラベル (select_optionの場合)")
-    wait_time_ms: int | None = Field(None, description="このアクション固有の最大待機時間 (ミリ秒)。省略時はdefault_timeout_msが使われる。")
+    wait_time_ms: int | None = Field(None, description="このアクション固有の最大待機時間 (ミリ秒)")
+# --- ▲▲▲ ActionStep モデルを修正 ▲▲▲ ---
 
 class WebRunnerInput(BaseModel):
-    target_url: Union[HttpUrl, str] = Field(..., description="自動化を開始するWebページのURL (文字列も許容)")
+    target_url: Union[HttpUrl, str] = Field(..., description="自動化を開始するWebページのURL")
     actions: List[ActionStep] = Field(..., description="実行するアクションステップのリスト", min_length=1)
-    headless: bool = Field(True, description="ヘッドレスモードで実行するかどうか (デフォルトはTrue)") # MCP経由ではTrueがデフォルトで良さそう
+    headless: bool = Field(True, description="ヘッドレスモードで実行するかどうか")
     slow_mo: int = Field(0, description="各操作間の待機時間 (ミリ秒)", ge=0)
-    default_timeout_ms: int | None = Field(None, description=f"デフォルトのアクションタイムアウト(ミリ秒)。省略時はサーバー設定 ({config.DEFAULT_ACTION_TIMEOUT}ms) が使われる。")
+    default_timeout_ms: int | None = Field(None, description=f"デフォルトのアクションタイムアウト(ミリ秒)")
+
+
 
 # --- FastMCP サーバーインスタンス作成 (変更なし) ---
 mcp = FastMCP(

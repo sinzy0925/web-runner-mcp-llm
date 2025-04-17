@@ -1,0 +1,33 @@
+{
+  "target_url": "https://www.google.co.jp/",
+  "actions": [
+    {
+      "memo": "検索ボックスに「ジャパン」と入力して",
+      "action": "input",
+      "selector": "input[placeholder='Enter text']",
+      "target_hints": [
+        {
+          "type": "placeholder",
+          "value": "Enter text",
+          "confidence": "high"
+        },
+        {
+          "type": "css_selector_candidate",
+          "value": "input[placeholder='Enter text']",
+          "confidence": "high"
+        },
+        {
+          "type": "css_selector_candidate",
+          "value": "input[type='text']",
+          "confidence": "medium"
+        },
+        {
+          "type": "css_selector_candidate",
+          "value": "input",
+          "confidence": "low"
+        }
+      ],
+      "value": "ジャパン"
+    }
+  ]
+}

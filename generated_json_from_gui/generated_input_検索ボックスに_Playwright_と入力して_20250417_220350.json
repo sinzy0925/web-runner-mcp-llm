@@ -1,0 +1,39 @@
+{
+  "target_url": "https://www.google.com/",
+  "actions": [
+    {
+      "memo": "検索ボックスに「Playwright」と入力して",
+      "action": "input",
+      "selector": "textarea[aria-label=\"検索\"]",
+      "target_hints": [
+        {
+          "type": "aria_label",
+          "value": "検索",
+          "confidence": "high"
+        },
+        {
+          "type": "role_and_text",
+          "name": "検索",
+          "value": "textbox",
+          "confidence": "medium"
+        },
+        {
+          "type": "css_selector_candidate",
+          "value": "textarea.gLFyf",
+          "confidence": "medium"
+        },
+        {
+          "type": "css_selector_candidate",
+          "value": "textarea[aria-label=\"検索\"]",
+          "confidence": "medium"
+        },
+        {
+          "type": "id",
+          "value": "APjFqb",
+          "confidence": "low"
+        }
+      ],
+      "value": "Playwright"
+    }
+  ]
+}

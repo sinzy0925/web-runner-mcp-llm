@@ -1,0 +1,35 @@
+{
+  "target_url": "https://crowdworks.jp/public/jobs/search?category_id=228&order=new&page=1",
+  "actions": [
+    {
+      "memo": "画面上部の中央にある１件目のテキストリンクをクリックして",
+      "action": "click",
+      "selector": "ul.gH9lt > li:first-child h3 a",
+      "target_hints": [
+        {
+          "type": "nth_child",
+          "value": null,
+          "common_selector": "ul.gH9lt.OW4Y6.QH0Pz > li:nth-child(1) h3 a",
+          "index": 0,
+          "confidence": "high"
+        },
+        {
+          "type": "css_selector_candidate",
+          "value": "ul.gH9lt > li:nth-child(1) > div > div.FY2t2 > div > h3 > a",
+          "confidence": "medium"
+        },
+        {
+          "type": "css_selector_candidate",
+          "value": ".gH9lt > li:first-child h3 a",
+          "confidence": "medium"
+        },
+        {
+          "type": "role_and_text",
+          "value": "《初心者歓迎》生成AIを活用した記事作成のお仕事",
+          "name": "《初心者歓迎》生成AIを活用した記事作成のお仕事",
+          "confidence": "low"
+        }
+      ]
+    }
+  ]
+}

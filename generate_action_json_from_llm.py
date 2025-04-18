@@ -30,6 +30,7 @@ except Exception as e:
 
 # --- Geminiモデル設定 ---
 MODEL_NAME = "gemini-2.0-flash" # または "gemini-1.5-pro-latest" など
+#MODEL_NAME = "gemini-1.5-pro-latest"# など
 try:
     model = genai.GenerativeModel(model_name=MODEL_NAME)
     logger.info(f"Geminiモデル '{MODEL_NAME}' を初期化しました。")
@@ -108,43 +109,66 @@ def get_element_info_list_with_fallback(
 # HTMLコンテンツ
 ```html
 {html_content}
+```
 
-
-ユーザーの指示
+# ユーザーの指示
 「{instruction}」
 
-あなたのタスク
+# あなたのタスク
 
-要素特定ヒント (hints): 指示された要素を特定するために、以下の情報をPlaywrightのLocator APIが利用しやすい形で、変更に強い方法を優先して抽出し、確信度と共にJSONオブジェクトの**配列（リスト）**として出力 (確信度順)。
+1.  **要素特定ヒント (hints):** 指示された要素を特定するために、以下の情報をPlaywrightのLocator APIが利用しやすい形で、変更に強い方法を優先して抽出し、確信度と共にJSONオブジェクトの**配列（リスト）**として出力してください。
+    **可能な限り多くの、そして多様な種類（最低3種類以上推奨）**の特定方法を、確信度の高い順に提案してください。特に `test_id`, `role_and_text`, `aria_label`, `text_exact` が利用可能であれば優先的に含めてください。
+    - type: ("nth_child", "test_id", "role_and_text", "aria_label", "text_exact", "placeholder", "css_selector_candidate")
+    - value: 特定に必要な値。type="nth_child"の場合は通常null。
+    - name: type="role_and_text" の場合、テキスト/aria-label。
+    - level: type="role_and_text", role="heading" の場合、見出しレベル。
+    - common_selector: type="nth_child" の場合、共通CSSセレクター。
+    - index: type="nth_child" の場合、0始まりのインデックス。
+    - confidence: ("high", "medium", "low")。
+    ** 重要: この hints 配列内のオブジェクトには、絶対に fallback_selector キーを含めないでください。**
 
-type: ("nth_child", "test_id", "role_and_text", "aria_label", "text_exact", "placeholder", "css_selector_candidate")
+# ユーザーの指示
+ 「{instruction}」
 
-value: 特定に必要な値。type="nth_child"の場合は通常null。
+2.  **フォールバックセレクター (fallback_selector):** もし特定可能であれば、最も信頼でき、構造変化に強く、簡潔な単一のCSSセレクター (文字列) を指定してください。IDや意味のある属性（role, name, data-testidなど）を優先してください。特定が難しい、あるいは不要と判断した場合は null を指定してください。
+    - **ユーザーがselectorを指定した場合は、必ずそのselectorをfallback_selectorに設定すること。）
 
-name: type="role_and_text" の場合、テキスト/aria-label。
+# ユーザーの指示
+ 「{instruction}」
 
-level: type="role_and_text", role="heading" の場合、見出しレベル。
-
-common_selector: type="nth_child" の場合、共通CSSセレクター。
-
-index: type="nth_child" の場合、0始まりのインデックス。
-
-confidence: ("high", "medium", "low")。
-重要: この hints 配列内のオブジェクトには、絶対に fallback_selector キーを含めないでください。
-
-フォールバックセレクター (fallback_selector): もし特定可能であれば、最も信頼でき、構造変化に強く、簡潔な単一のCSSセレクター (文字列) を指定してください。IDや意味のある属性（role, name, data-testidなど）を優先してください。特定が難しい、あるいは不要と判断した場合は null を指定してください。
-
-アクション詳細 (action_details): ユーザー指示から実行すべきアクションを推測し、以下のキーを持つオブジェクトで出力。
-
-action_type: 推奨されるアクション名 (文字列, 例: "input", "click", "get_text_content", "get_attribute", "select_option", "hover", "scroll_to_element" など)。不明な場合は "unknown"。
-
-value: (Optional[str|float|int]) action_type="input" の場合に入力する値、action_type="sleep" の場合に待機秒数。 指示から入力値（例：「〇〇」）を正確に抽出すること。
-
-attribute_name: (Optional[str]) action_type="get_attribute" の場合に取得する属性名。指示から属性名（例：「href」）を正確に抽出すること。
-
-option_type: (Optional[str]) action_type="select_option" の場合の選択タイプ ('value', 'index', 'label')。
-
-option_value: (Optional[str|int]) action_type="select_option" の場合の選択値。
+3.  **アクション詳細 (action_details):** ユーザー指示を**注意深く分析**し、以下の**ルール**に従って最適なアクションとパラメータを決定してください。
+    # **重要: ユーザーが"attribute_name"を指定した場合は、必ずそのattribute_nameを活用すること。
+    - **指示キーワードに基づく action_type と attribute_name の決定:**
+        # --- ▼▼▼ content取得ルールを明確化 ▼▼▼
+        # [最重要] 指示に「**リンク先コンテンツ**」または「**リンク先の内容**」が含まれ、「**全て**の」が含まれる場合:
+            `"action_type": "get_all_attributes"`, `"attribute_name": "content"`
+        - 指示に「**リンク先コンテンツ**」または「**リンク先の内容**」が含まれ、「**全て**の」が含まれない場合:
+            `"action_type": "get_attribute"`, `"attribute_name": "content"`
+        # --- ▲▲▲ ---
+        # [最重要] 指示に「**リンク先URL**」または「**href属性**」が含まれ、「**全て**の」が含まれる場合:
+            `"action_type": "get_all_attributes"`, `"attribute_name": "href"`
+        - 指示に「**リンク先URL**」または「**href属性**」が含まれ、「**全て**の」が含まれない場合:
+            `"action_type": "get_attribute"`, `"attribute_name": "href"`
+        - 指示に「**PDFの内容**」が含まれる場合:
+            `"action_type": "get_attribute"` または `"get_all_attributes"`, `"attribute_name": "pdf"` (「全ての」があれば `get_all_attributes`)
+        - 指示に「**メールアドレス**」が含まれる場合:
+            `"action_type": "get_attribute"` または `"get_all_attributes"`, `"attribute_name": "mail"` (「全ての」があれば `get_all_attributes`)
+        - 指示に「**テキスト**を取得」のような記述があり、上記以外の場合:
+            `"action_type": "get_text_content"` または `"get_all_text_contents"` (「全ての」があれば `get_all_text_contents`)
+        - 指示に「**〇〇属性**を取得」のような記述があり、上記以外の場合:
+            `"action_type": "get_attribute"` または `"get_all_attributes"`, `attribute_name` に "〇〇" を設定 (「全ての」があれば `get_all_attributes`)
+        - 指示に「**入力**」が含まれる場合: `"action_type": "input"`
+        - 指示に「**クリック**」が含まれる場合: `"action_type": "click"`
+        - 指示に「**マウス**」「**ホバー**」が含まれる場合: `"action_type": "hover"`
+        - 指示に「**ドロップダウン**」「**選択**」が含まれる場合: `"action_type": "select_option"`
+        - 指示に「**スクロール**」が含まれる場合: `"action_type": "scroll_to_element"` または `"scroll_page_to_bottom"`
+        - 指示に「**待機**」が含まれる場合: `"action_type": "sleep"`
+        - 上記ルールで判断できない場合は `"action_type": "unknown"`。
+    - **その他のパラメータ:**
+        - value: (Optional) "input", "sleep" の場合。指示から正確に抽出。
+        - attribute_name: (Optional) "get_attribute", "get_all_attributes" の場合。**上記のルールに従って設定すること。**
+        - option_type: (Optional) "select_option" の場合。
+        - option_value: (Optional) "select_option" の場合。
 
 出力JSONフォーマット (この形式のJSONオブジェクトのみを出力すること):
 {{
@@ -164,14 +188,16 @@ option_value: (Optional[str|int]) action_type="select_option" の場合の選択
 要素が見つからない/アクションが不明な場合は、"hints": [], "fallback_selector": null, "action_details": {{"action_type": "unknown"}} のように返してください。
 他の説明やマークダウンは含めないでください。
 出力JSON:"""
+
 # --- ▲▲▲ プロンプト修正 ▲▲▲ ---
+
+    #print(prompt)
 
     generated_hints = None
     fallback_selector = None
     action_details = None
     for attempt in range(max_retries):
         try:
-            time.sleep(10) # APIレート制限考慮
             logger.info(f"Gemini APIへのリクエスト送信 (試行 {attempt + 1}/{max_retries})...")
             start_time = time.monotonic()
             safety_settings = [ {"category": c, "threshold": "BLOCK_NONE"} for c in ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"]]

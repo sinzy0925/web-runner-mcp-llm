@@ -1,0 +1,49 @@
+[
+  {
+    "case_name": "Case7_クラウドワークス１",
+    "instruction": "リンク先URLを全部取得して",
+    "url": "https://crowdworks.jp/public/jobs/search?category_id=228&order=new&page=1"
+  },
+  {
+    "case_name": "Case8_クラウドワークス２",
+    "instruction": "リンク先コンテンツを全部取得して",
+    "url": "https://crowdworks.jp/public/jobs/search?category_id=228&order=new&page=1"
+  },
+  {
+      "case_name": "Case1_Google_Title",
+      "instruction": "ページのタイトルを取得して",
+      "url": "https://www.google.com/"
+    },
+    {
+      "case_name": "Case1-1_google_input-click",
+      "instruction": "検索ボックスに日本と入力し、google 検索をクリックして",
+      "url": "https://www.google.com/"
+    },
+    {
+      "case_name": "Case2_ITMedia_H1",
+      "instruction": "一番上の見出しのテキストを取得して",
+      "url": "https://www.itmedia.co.jp/news/"
+    },
+    {
+      "case_name": "Case3_Yahoo_Logo_Link",
+      "instruction": "ページ上部にあるロゴ画像のリンク先URLを取得して",
+      "url": "https://www.yahoo.co.jp/"
+    },
+    {
+      "case_name": "Case4_google_ソース",
+      "instruction": "メインコンテンツ内の最初の画像のurlを取得して",
+      "url": "https://www.google.com/"
+    },
+    {
+      "case_name": "Case5_tdnet_dropdown",
+      "instruction": "１つ目のセレクトボックスをクリックして、７つ下を選んで",
+      "url": "https://www.release.tdnet.info/index.html"
+    },
+    {
+      "case_name": "Case6_tdnet_dropdown",
+      "instruction": "２つ目のセレクトボックスをクリックして",
+      "url": "https://www.release.tdnet.info/index.html"
+    }
+
+    
+  ]

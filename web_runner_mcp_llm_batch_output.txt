@@ -1,0 +1,1 @@
+テスト結果: Google_Search_Scenario,結果:ERROR - ステップ3 内部エラー: MCP実行失敗: {'error': 'MCP tool execution failed', 'r,Google_Search_Scenario_step2_screenshot.png

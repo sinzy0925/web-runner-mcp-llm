@@ -86,8 +86,11 @@ async def get_actual_html(url: str) -> Optional[str]:
         effective_timeout = config.DEFAULT_ACTION_TIMEOUT if hasattr(config, 'DEFAULT_ACTION_TIMEOUT') else 10000
         fetch_timeout = max(html_timeout, effective_timeout * 2)
         success, results = await playwright_launcher.run_playwright_automation_async(
-            target_url=url, actions=get_html_action, headless_mode=True,
-            slow_motion=0, default_timeout=fetch_timeout
+            target_url=url, 
+            actions=get_html_action, 
+            headless_mode=False,#事前HTMLの取得
+            slow_motion=0, 
+            default_timeout=fetch_timeout
         )
         if success and results and isinstance(results[0].get("html"), str):
             html_content = results[0]["html"]

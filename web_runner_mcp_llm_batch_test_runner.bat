@@ -1,0 +1,13 @@
+rem cd web-runner-mcp-llm
+rem venv312\scripts\activate
+del web_runner_mcp_llm_batch_output.txt
+python web_runner_mcp_llm_batch_test_runner.py
+python web_runner_mcp_llm_batch_test_runner.py
+python web_runner_mcp_llm_batch_test_runner.py
+python web_runner_mcp_llm_batch_test_runner.py
+python web_runner_mcp_llm_batch_test_runner.py
+python web_runner_mcp_llm_batch_test_runner.py
+python web_runner_mcp_llm_batch_test_runner.py
+python web_runner_mcp_llm_batch_test_runner.py
+python web_runner_mcp_llm_batch_test_runner.py
+python web_runner_mcp_llm_batch_test_runner.py

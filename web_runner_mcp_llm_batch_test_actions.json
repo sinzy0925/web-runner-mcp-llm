@@ -1,0 +1,23 @@
+[
+    {
+      "case_name": "Google_Search_Scenario",
+      "start_url": "https://www.google.com/",
+      "steps": [
+        {
+          "instruction": "検索ボックスに「Playwright」と入力して"
+        },
+        {
+          "instruction": "中央にある「Google 検索」ボタンをクリックして"
+        },
+        {
+          "instruction": "「次へ」リンクをクリックして"
+        },
+        {
+          "instruction": "結果リストの最初の項目（タイトル部分のリンク）をクリックして"
+        },
+        {
+          "instruction": "遷移したページのタイトルを取得して"
+        }
+      ]
+    }
+  ]

@@ -1,0 +1,28 @@
+{
+  "target_url": "https://www.google.com/",
+  "actions": [
+    {
+      "memo": "「次へ」リンクをクリックして",
+      "action": "click",
+      "selector": null,
+      "target_hints": [
+        {
+          "type": "text_exact",
+          "value": "次へ",
+          "confidence": "high"
+        },
+        {
+          "type": "role_and_text",
+          "name": "次へ",
+          "confidence": "medium",
+          "role": "link"
+        },
+        {
+          "type": "css_selector_candidate",
+          "value": ":text('次へ')",
+          "confidence": "low"
+        }
+      ]
+    }
+  ]
+}

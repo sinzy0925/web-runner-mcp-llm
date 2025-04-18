@@ -1,0 +1,34 @@
+{
+  "target_url": "https://www.google.com/",
+  "actions": [
+    {
+      "memo": "中央にある「Google 検索」ボタンをクリックして",
+      "action": "click",
+      "selector": "input[name=\"btnK\"]",
+      "target_hints": [
+        {
+          "type": "aria_label",
+          "value": "Google 検索",
+          "confidence": "high"
+        },
+        {
+          "type": "role_and_text",
+          "name": "Google 検索",
+          "value": "Google 検索",
+          "confidence": "high"
+        },
+        {
+          "type": "css_selector_candidate",
+          "value": "input[name=\"btnK\"]",
+          "confidence": "medium"
+        },
+        {
+          "type": "nth_child",
+          "common_selector": ".FPdoLc > center > input",
+          "index": 0,
+          "confidence": "low"
+        }
+      ]
+    }
+  ]
+}

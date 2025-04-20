@@ -1,7 +1,7 @@
 [
     {
       "case_name": "Google_Search_Scenario",
-      "start_url": "https://www.google.com/",
+      "start_url": "https://crowdworks.jp/public/jobs/search?category_id=228&order=new&page=1",
       "steps": [
         {
           "instruction": "検索ボックスに「Playwright」と入力して"

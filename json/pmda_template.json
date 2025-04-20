@@ -1,0 +1,33 @@
+{
+  "target_url": "https://www.pmda.go.jp/PmdaSearch/iyakuSearch/",
+  "target_url_memo": "医薬品医療機器情報提供HP (PMDA) - 医薬品検索ページ",
+  "actions": [
+    {
+      "memo": "検索窓に {{薬剤名}} を入力",
+      "action": "input",
+      "selector": "#txtName",
+      "value": "{{薬剤名}}"
+    },
+    {
+      "memo": "検索窓に {{薬剤名２}} を入力",
+      "action": "input",
+      "selector": "#txtName",
+      "value": "{{薬剤名２}}"
+    },
+    {
+      "memo": "「検索」ボタンをクリック",
+      "action": "click",
+      "selector": "#ContentMainArea > div > div > p:nth-child(2) > span:nth-child(2) > input[type=image]"
+    },
+    {
+      "memo": "検索結果の最初の「添付文書」のTEXTリンクをクリック",
+      "action": "click",
+      "selector": "#ResultList > tbody > tr.TrColor01 > td:nth-child(4) > div > a:nth-child(2)"
+    },
+    {
+      "memo": "表示された添付文書の本文テキストを取得",
+      "action": "get_inner_text",
+      "selector": "#ResultSet > div:nth-child(2)"
+    }
+  ]
+}

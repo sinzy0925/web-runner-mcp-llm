@@ -1,0 +1,5 @@
+# pmda_config.yaml
+target_template: "./json/template/tmp_pmda1.json"
+薬剤名: "イブプロフェン"
+headless: false
+slow_mo: 200

@@ -1,0 +1,5 @@
+# pmda_config.yaml
+target_template: "./json/template/tmp_google1_all_texts.json"
+検索文字: "AIエージェント 日本"
+headless: false
+slow_mo: 200

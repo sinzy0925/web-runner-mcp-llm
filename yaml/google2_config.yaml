@@ -1,0 +1,5 @@
+# pmda_config.yaml
+target_template: "./json/template/tmp_google2_all_contents.json"
+検索文字: "東京都　目黒区　株式会社"
+headless: false
+slow_mo: 200

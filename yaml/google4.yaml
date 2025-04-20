@@ -1,0 +1,5 @@
+# pmda_config.yaml
+target_template: "./json/template/tmp_google4_YahooFinance.json"
+会社名or会社コード: "9501"
+headless: false
+slow_mo: 200

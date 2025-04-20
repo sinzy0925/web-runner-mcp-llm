@@ -1,0 +1,5 @@
+# pmda_config.yaml
+target_template: "./json/template/tmp_google3_company2mail.json"
+検索文字: "東京都　渋谷区　会社　お問い合わせ"
+headless: false
+slow_mo: 200

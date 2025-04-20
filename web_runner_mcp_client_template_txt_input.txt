@@ -1,0 +1,2 @@
+{"target_template": "./json/template/tmp_pmda1.json", "薬剤名": "ロキソニン", "headless": false, "slow_mo": 100}
+{"target_template": "./json/template/tmp_pmda1.json", "薬剤名": "パキシル", "headless": false, "slow_mo": 100}

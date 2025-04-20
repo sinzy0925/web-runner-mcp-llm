@@ -1,0 +1,60 @@
+2025-04-20 22:00:55,701 - [INFO] [__main__:79] --- Starting Batch Processing from: web_runner_mcp_client_template_txt_input.txt ---
+2025-04-20 22:00:55,701 - [INFO] [__main__:80] Output directory: output_batch
+2025-04-20 22:00:55,701 - [INFO] [__main__:93] 
+--- Processing Line 1 ---
+2025-04-20 22:00:55,701 - [INFO] [__main__:105] Parsed config: ['target_template', '薬剤名', 'headless', 'slow_mo']
+2025-04-20 22:00:55,701 - [INFO] [__main__:119] Template: json\template\tmp_pmda1.json, Params: ['薬剤名'], Settings: {'headless': False, 'slow_mo': 100, 'default_timeout_ms': None}
+2025-04-20 22:00:55,729 - [INFO] [__main__:131] Executing Web-Runner for line 1...
+2025-04-20 22:01:05,744 - [INFO] [__main__:141] Line 1: Execution successful.
+2025-04-20 22:01:05,744 - [ERROR] [__main__:75] Failed to save result file for line 1: output_batch\line1_tmp_pmda1_target_template_.\json\template_success.json - [Errno 2] No such file or directory: 'output_batch\\line1_tmp_pmda1_target_template_.\\json\\template_success.json'
+2025-04-20 22:01:06,241 - [INFO] [__main__:93] 
+--- Processing Line 2 ---
+2025-04-20 22:01:06,241 - [INFO] [__main__:105] Parsed config: ['target_template', '薬剤名', 'headless', 'slow_mo']
+2025-04-20 22:01:06,241 - [INFO] [__main__:119] Template: json\template\tmp_pmda1.json, Params: ['薬剤名'], Settings: {'headless': False, 'slow_mo': 100, 'default_timeout_ms': None}
+2025-04-20 22:01:06,267 - [INFO] [__main__:131] Executing Web-Runner for line 2...
+2025-04-20 22:01:16,724 - [INFO] [__main__:141] Line 2: Execution successful.
+2025-04-20 22:01:16,726 - [ERROR] [__main__:75] Failed to save result file for line 2: output_batch\line2_tmp_pmda1_target_template_.\json\template_success.json - [Errno 2] No such file or directory: 'output_batch\\line2_tmp_pmda1_target_template_.\\json\\template_success.json'
+2025-04-20 22:01:17,233 - [INFO] [__main__:173] --- Batch Processing Finished ---
+2025-04-20 22:01:17,233 - [INFO] [__main__:174] Total lines processed: 2
+2025-04-20 22:01:17,233 - [INFO] [__main__:175] Successful tasks: 2
+2025-04-20 22:01:17,233 - [INFO] [__main__:176] Failed tasks: 0
+2025-04-20 22:02:30,480 - [INFO] [__main__:79] --- Starting Batch Processing from: web_runner_mcp_client_template_txt_input.txt ---
+2025-04-20 22:02:30,480 - [INFO] [__main__:80] Output directory: my_batch_results
+2025-04-20 22:02:30,480 - [INFO] [__main__:93] 
+--- Processing Line 1 ---
+2025-04-20 22:02:30,480 - [INFO] [__main__:105] Parsed config: ['target_template', '薬剤名', 'headless', 'slow_mo']
+2025-04-20 22:02:30,480 - [INFO] [__main__:119] Template: json\template\tmp_pmda1.json, Params: ['薬剤名'], Settings: {'headless': False, 'slow_mo': 100, 'default_timeout_ms': None}
+2025-04-20 22:02:30,480 - [INFO] [__main__:131] Executing Web-Runner for line 1...
+2025-04-20 22:02:40,704 - [INFO] [__main__:141] Line 1: Execution successful.
+2025-04-20 22:02:40,711 - [ERROR] [__main__:75] Failed to save result file for line 1: my_batch_results\line1_tmp_pmda1_target_template_.\json\template_success.json - [Errno 2] No such file or directory: 'my_batch_results\\line1_tmp_pmda1_target_template_.\\json\\template_success.json'
+2025-04-20 22:02:41,219 - [INFO] [__main__:93] 
+--- Processing Line 2 ---
+2025-04-20 22:02:41,219 - [INFO] [__main__:105] Parsed config: ['target_template', '薬剤名', 'headless', 'slow_mo']
+2025-04-20 22:02:41,221 - [INFO] [__main__:119] Template: json\template\tmp_pmda1.json, Params: ['薬剤名'], Settings: {'headless': False, 'slow_mo': 100, 'default_timeout_ms': None}
+2025-04-20 22:02:41,221 - [INFO] [__main__:131] Executing Web-Runner for line 2...
+2025-04-20 22:02:50,844 - [INFO] [__main__:141] Line 2: Execution successful.
+2025-04-20 22:02:50,850 - [ERROR] [__main__:75] Failed to save result file for line 2: my_batch_results\line2_tmp_pmda1_target_template_.\json\template_success.json - [Errno 2] No such file or directory: 'my_batch_results\\line2_tmp_pmda1_target_template_.\\json\\template_success.json'
+2025-04-20 22:02:51,352 - [INFO] [__main__:173] --- Batch Processing Finished ---
+2025-04-20 22:02:51,352 - [INFO] [__main__:174] Total lines processed: 2
+2025-04-20 22:02:51,352 - [INFO] [__main__:175] Successful tasks: 2
+2025-04-20 22:02:51,352 - [INFO] [__main__:176] Failed tasks: 0
+2025-04-20 22:06:49,017 - [INFO] [__main__:146] --- Starting Batch Processing from: web_runner_mcp_client_template_txt_input.txt ---
+2025-04-20 22:06:49,017 - [INFO] [__main__:147] Output directory: my_batch_results
+2025-04-20 22:06:49,017 - [INFO] [__main__:160] 
+--- Processing Line 1 ---
+2025-04-20 22:06:49,017 - [INFO] [__main__:176] Parsed config keys: ['target_template', '薬剤名', 'headless', 'slow_mo']
+2025-04-20 22:06:49,017 - [INFO] [__main__:191] Template: json\template\tmp_pmda1.json, Params: ['薬剤名'], Settings: {'headless': False, 'slow_mo': 100, 'default_timeout_ms': None}
+2025-04-20 22:06:49,024 - [INFO] [__main__:202] Executing Web-Runner for line 1...
+2025-04-20 22:06:58,979 - [INFO] [__main__:212] Line 1: Execution successful.
+2025-04-20 22:06:58,995 - [INFO] [__main__:137] Saved result for line 1 to line1_tmp_pmda1_薬剤名_ロキソニン_success.json
+2025-04-20 22:06:59,507 - [INFO] [__main__:160] 
+--- Processing Line 2 ---
+2025-04-20 22:06:59,507 - [INFO] [__main__:176] Parsed config keys: ['target_template', '薬剤名', 'headless', 'slow_mo']
+2025-04-20 22:06:59,507 - [INFO] [__main__:191] Template: json\template\tmp_pmda1.json, Params: ['薬剤名'], Settings: {'headless': False, 'slow_mo': 100, 'default_timeout_ms': None}
+2025-04-20 22:06:59,507 - [INFO] [__main__:202] Executing Web-Runner for line 2...
+2025-04-20 22:07:09,683 - [INFO] [__main__:212] Line 2: Execution successful.
+2025-04-20 22:07:09,688 - [INFO] [__main__:137] Saved result for line 2 to line2_tmp_pmda1_薬剤名_パキシル_success.json
+2025-04-20 22:07:10,188 - [INFO] [__main__:251] --- Batch Processing Finished ---
+2025-04-20 22:07:10,188 - [INFO] [__main__:252] Total lines processed: 2
+2025-04-20 22:07:10,189 - [INFO] [__main__:253] Successful tasks: 2
+2025-04-20 22:07:10,189 - [INFO] [__main__:254] Failed tasks: 0

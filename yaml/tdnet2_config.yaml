@@ -1,0 +1,6 @@
+# pmda_config.yaml
+target_template: "./json/template/tmp_tdnet2_pdf.json"
+セレクトボックス選択肢: "14"
+検索文字: "不動産"
+headless: false
+slow_mo: 200

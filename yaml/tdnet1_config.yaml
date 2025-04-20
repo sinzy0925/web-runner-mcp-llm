@@ -1,0 +1,6 @@
+# pmda_config.yaml
+target_template: "./json/template/tmp_tdnet1_text_url.json"
+セレクトボックス選択肢: "14"
+検索文字: "上場廃止"
+headless: false
+slow_mo: 200
